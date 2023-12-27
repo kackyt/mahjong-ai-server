@@ -1,0 +1,3 @@
+[submodule "loadlibrary"]
+	path = loadlibrary
+	url = git@github.com:kackyt/loadlibrary.git
