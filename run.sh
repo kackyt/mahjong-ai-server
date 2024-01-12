@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker run -it maujan-server /bin/bash
+docker run --rm -it maujan-server /bin/bash
