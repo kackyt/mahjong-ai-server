@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  app:
+    build: .
+    platform: "linux/386"
+    volumes:
+      - .:/home/app
+    command: "sh"
+    tty: true
+    stdin_open: true
+    cap_add:
+      - "SYS_PTRACE"
