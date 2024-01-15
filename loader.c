@@ -43,7 +43,7 @@
 #include "pe_linker.h"
 #include "ntoskernel.h"
 #include "util.h"
-#include "hook.h"
+// #include "hook.h"
 #include "log.h"
 #include "rsignal.h"
 #include "engineboot.h"
@@ -99,7 +99,7 @@ static int scoreCallback(int *paiarray, int *mentsu, int length, int machi, void
 {
     RESULT_ITEM item;
     MJ_GAMESTATE *state = (MJ_GAMESTATE *)inf;
-    make_resultitem(paiarray, mentsu, length, &item, &state->gamestate, state->agarihai, machi);
+    // make_resultitem(paiarray, mentsu, length, &item, &state->gamestate, state->agarihai, machi);
 
     return item.score;
     // return item.mentsusize == 7 ? item.score/300 : item.score;
