@@ -1,4 +1,4 @@
-FROM kackyt/rust-cmake-devel
+FROM kackyt/rust-cmake-devel:main
 
 ENV APP_PATH /opt/apps
 ENV DEBIAN_FRONTEND noninteractive
