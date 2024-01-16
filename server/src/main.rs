@@ -10,13 +10,12 @@ type MJPInterfaceFuncP = extern "stdcall" fn(*mut c_void, u32, u32, u32) -> u32;
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = env::args().collect();
-    let mut image: pe_image = Default::default();
 
     ensure!(args.len() >= 2, "usage: {} DLLPath", args[0]);
 
     let path = PathBuf::from(&args[1]);
 
-    let _ = win_dlopen(&mut image, &path);
+    let _ = win_dlopen(&path);
 
     unsafe {
         let func: MJPInterfaceFuncP = std::mem::transmute(win_dlsym("MJPInterfaceFunc")?);
