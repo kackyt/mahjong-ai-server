@@ -294,7 +294,8 @@ int main(int argc, char **argv, char **envp)
 
         size_t size = func(NULL, MJPI_CREATEINSTANCE, 0, 0);
 
-        size = func(NULL, MJPI_CREATEINSTANCE, 0, 0);
+        printf("size = %u\n", size);
+
         if (size > 0)
         {
             inst = malloc(size);
