@@ -2,7 +2,7 @@ version: "3.9"
 services:
   app:
     build: .
-    platform: "linux/386"
+    platform: "linux/amd64"
     volumes:
       - .:/home/app
     command: "sh"
