@@ -210,7 +210,7 @@ typedef struct
 #define MJKS_REACH 1
 #define MJKS_NAKI 2
 
-// typedef UINT(WINAPI *MJPIFunc)(void *, UINT, UINT, UINT);
+typedef UINT(WINAPI *MJPIFunc)(void *, UINT, UINT, UINT);
 
 #define LOWORD(x) (x & 0xFFFF)
 #define MAKELPARAM(l, r) (l << 16 | (r & 0xFFFF))
