@@ -6,8 +6,6 @@ ENV HOME /home/app
 
 USER root
 
-RUN apt-get install strace
-
 COPY . ${APP_PATH}
 WORKDIR ${APP_PATH}
 
