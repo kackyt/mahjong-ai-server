@@ -4,6 +4,9 @@
 #ifndef __MIPIFACE_H__
 #define __MIPIFACE_H__
 
+typedef unsigned UINT;
+typedef unsigned short USHORT;
+
 #define MJ_INTERFACE_VERSION 12
 
 /* Messages for player's interface */

@@ -1,20 +1,19 @@
-FROM i386/rust:slim-bullseye
+FROM kackyt/rust-cmake-devel:main
 
 ENV APP_PATH /opt/apps
+ENV DEBIAN_FRONTEND noninteractive
+ENV HOME /home/app
 
-RUN apt update && apt install -y cmake libc6-dev gdb
-RUN groupadd -r app && useradd -r -g app app
+USER root
+
 COPY . ${APP_PATH}
 WORKDIR ${APP_PATH}
 
 RUN chown app:app ${APP_PATH} -R
 
 USER app
-ENV HOME /home/app
-
-RUN cd loadlibrary && cargo test --no-run
-
-WORKDIR ${APP_PATH}/loadlibrary
+WORKDIR ${APP_PATH}
+# RUN RUST_BACKTRACE=full cargo build
 
 ENTRYPOINT [ "/bin/sh", "-c" ]
-CMD ["cargo test"]
+CMD ["cargo run -p server"]
