@@ -4,4 +4,5 @@ resolver = "2"
 members = [
     "loadlibrary",
     "server",
+    "mahjong-app-engine/mahjong_core",
 ]

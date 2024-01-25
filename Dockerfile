@@ -13,7 +13,7 @@ RUN chown app:app ${APP_PATH} -R
 
 USER app
 WORKDIR ${APP_PATH}
-# RUN RUST_BACKTRACE=full cargo build
+RUN cargo build -p server
 
 ENTRYPOINT [ "/bin/sh", "-c" ]
-CMD ["cargo run -p server"]
+CMD ["cargo run -p server ${APP_PATH}/Test.dll"]

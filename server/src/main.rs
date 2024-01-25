@@ -3,7 +3,7 @@ use std::{env, path::PathBuf, ffi::c_void};
 use loadlibrary::{win_dlopen, win_dlsym};
 use anyhow::ensure;
 
-use crate::{bindings::{MJPI_CREATEINSTANCE, MJPI_ONEXCHANGE, MJST_INKYOKU, MJPI_SUTEHAI, MJPI_INITIALIZE}, interface::mjsend_message};
+use crate::{bindings::{MJEK_RYUKYOKU, MJPIR_TSUMO, MJPI_CREATEINSTANCE, MJPI_ENDGAME, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_ONEXCHANGE, MJPI_SUTEHAI, MJST_INKYOKU}, interface::mjsend_message};
 
 extern crate libc;
 
@@ -37,13 +37,50 @@ fn main() -> anyhow::Result<()> {
             ensure!(!inst.is_null(), "cannot allocate AI memory.");
 
             func(inst, MJPI_INITIALIZE, 0, std::mem::transmute(sendmes_ptr));
-            
+            {
+                let state = &mut interface::G_STATE;
+                state.shuffle();
+                state.start();
+            }
+        
             /* 途中参加でエミュレート */
             func(inst, MJPI_ONEXCHANGE, MJST_INKYOKU, 0);
+            let mut is_agari = false;
 
-            let ret = func(inst, MJPI_SUTEHAI, 10, 0);
+            for i in 0..18 {
+                let mut tsumohai_num: u32;
+                {
+                    let state = &mut interface::G_STATE;
+                    state.tsumo();
+                    tsumohai_num = state.players[state.teban as usize].tsumohai.pai_num as u32;
+                }
 
-            println!("ret = {} flag = {:04x}", ret & 0x3F, ret & 0xFF80);
+                let ret = func(inst, MJPI_SUTEHAI, tsumohai_num, 0);
+                let index = ret & 0x3F;
+                let flag = ret & 0xFF80;
+                println!("ret = {} flag = {:04x}", index, flag);
+
+                {
+                    let state = &mut interface::G_STATE;
+
+                    if flag == MJPI_SUTEHAI {
+                        state.sutehai(index as usize);                        
+                    } else if flag == MJPIR_TSUMO {
+                        let score: [i32; 4] = [0, 0, 0, 0];
+                        println!("agari!!!");
+                        state.tsumo_agari();
+                        is_agari = true;
+                        func(inst, MJPI_ENDKYOKU, MJEK_RYUKYOKU, std::mem::transmute(score.as_ptr()));
+                        break;
+                    }
+                }
+            }
+
+            if !is_agari {
+                println!("流局(;;)");
+                let score: [i32; 4] = [-3000, 0, 0, 0];
+                func(inst, MJPI_ENDKYOKU, MJEK_RYUKYOKU, std::mem::transmute(score.as_ptr()));
+            }
 
             libc::free(inst);
         }
