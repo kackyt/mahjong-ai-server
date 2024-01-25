@@ -5,8 +5,9 @@ services:
     platform: "linux/amd64"
     volumes:
       - .:/home/app
-#    command: "sh"
+    command: |
+#      bash -c "cargo run -p server"
 #    tty: true
-#    stdin_open: true
+#     stdin_open: true
     cap_add:
       - "SYS_PTRACE"

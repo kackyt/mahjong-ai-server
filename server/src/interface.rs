@@ -2,7 +2,7 @@ use std::ffi::{c_void, c_char, CStr};
 use mahjong_core::{agari::{add_machi_to_mentsu, AgariBehavior}, mahjong_generated::open_mahjong::{GameStateT, MentsuFlag, Mentsu, MentsuPai, MentsuType, Pai, PaiT}, shanten::{all_of_mentsu, PaiState}};
 use once_cell::sync::Lazy;
 
-use crate::bindings::{MJMI_GETTEHAI, MJITehai, MJMI_GETVERSION, MJMI_GETSCORE, MJMI_FUKIDASHI, MJMI_GETMACHI, MJMI_GETAGARITEN, MJMI_GETKAWA, MJMI_GETKAWAEX, MJIKawahai};
+use crate::bindings::{MJIKawahai, MJITehai, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA, MJMI_GETHAIREMAIN, MJMI_GETKAWA, MJMI_GETKAWAEX, MJMI_GETMACHI, MJMI_GETSCORE, MJMI_GETTEHAI, MJMI_GETVERSION, MJMI_GETVISIBLEHAIS};
 
 extern crate libc;
 
@@ -32,7 +32,7 @@ pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(|| Default::default());
 pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, param1: u32, param2: u32) -> u32 {
     let taku: &GameStateT = &G_STATE;
 
-    println!("message flag = {:08x} param1 = {:08x} param2 = {:08x}", message, param1, param2);
+    // println!("message flag = {:08x} param1 = {:08x} param2 = {:08x}", message, param1, param2);
 
     match message {
         MJMI_GETTEHAI => {
@@ -43,8 +43,8 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
 
                 for i in 0..player.tehai_len as usize {
                     tehai.tehai[i] = player.tehai[i].pai_num as u32;
-                    tehai.tehai_max = player.tehai_len as u32;
                 }
+                tehai.tehai_max = player.tehai_len as u32;
             }
 
             1
@@ -272,6 +272,25 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
             }
 
             0
+        },
+        MJMI_GETDORA => {
+            let mut p: *mut u32 = std::mem::transmute(param1);
+            let dora = taku.get_dora();
+            for i in 0..dora.len() as usize {
+                *p = dora[i].pai_num as u32;
+                p = p.add(1);
+            }
+            dora.len() as u32
+        },
+        MJMI_GETHAIREMAIN => {
+            taku.remain()
+        },
+        MJMI_GETVISIBLEHAIS => {
+            let player = &taku.players[taku.teban as usize];
+
+            player.tehai[0..player.tehai_len as usize].into_iter().chain(
+                player.kawahai[0..player.kawahai_len as usize].into_iter()
+            ).filter(|x| x.pai_num == param1 as u8).count() as u32
         },
         MJMI_GETSCORE => 25000,
         MJMI_GETVERSION => 12,

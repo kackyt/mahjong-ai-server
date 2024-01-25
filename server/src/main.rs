@@ -2,8 +2,9 @@ use std::{env, path::PathBuf, ffi::c_void};
 
 use loadlibrary::{win_dlopen, win_dlsym};
 use anyhow::ensure;
+use mahjong_core::shanten::PaiState;
 
-use crate::{bindings::{MJEK_RYUKYOKU, MJPIR_TSUMO, MJPI_CREATEINSTANCE, MJPI_ENDGAME, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_ONEXCHANGE, MJPI_SUTEHAI, MJST_INKYOKU}, interface::mjsend_message};
+use crate::{bindings::{MJEK_RYUKYOKU, MJPIR_SUTEHAI, MJPIR_TSUMO, MJPI_CREATEINSTANCE, MJPI_ENDGAME, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_ONEXCHANGE, MJPI_SUTEHAI, MJST_INKYOKU}, interface::mjsend_message};
 
 extern crate libc;
 
@@ -39,6 +40,7 @@ fn main() -> anyhow::Result<()> {
             func(inst, MJPI_INITIALIZE, 0, std::mem::transmute(sendmes_ptr));
             {
                 let state = &mut interface::G_STATE;
+                state.create(b"test", 1);
                 state.shuffle();
                 state.start();
             }
@@ -62,8 +64,18 @@ fn main() -> anyhow::Result<()> {
 
                 {
                     let state = &mut interface::G_STATE;
+                    {
+                        let player = &state.players[state.teban as usize];
+                        for p in &player.tehai {
+                            print!("{}", p);
+                        }
 
-                    if flag == MJPI_SUTEHAI {
+                        print!("{}", player.tsumohai);
+                        let shanten = PaiState::from(&player.tehai).get_shanten(0);
+                        println!(" シャンテン数 {}\r", shanten);
+                    }
+
+                    if flag == MJPIR_SUTEHAI {
                         state.sutehai(index as usize);                        
                     } else if flag == MJPIR_TSUMO {
                         let score: [i32; 4] = [0, 0, 0, 0];
