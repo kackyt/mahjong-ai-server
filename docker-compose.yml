@@ -2,12 +2,13 @@ version: "3.9"
 services:
   app:
     build: .
-    platform: "linux/amd64"
+    platform: "linux/i386"
     volumes:
       - .:/home/app
     command: |
-#      bash -c "cargo run -p server"
-#    tty: true
-#     stdin_open: true
+      bash
+#      bash -c "cargo run -p server -- /home/app/Test.dll"
+    tty: true
+    stdin_open: true
     cap_add:
       - "SYS_PTRACE"

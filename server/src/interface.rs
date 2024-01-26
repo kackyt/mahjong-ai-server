@@ -2,7 +2,7 @@ use std::ffi::{c_void, c_char, CStr};
 use mahjong_core::{agari::{add_machi_to_mentsu, AgariBehavior}, mahjong_generated::open_mahjong::{GameStateT, MentsuFlag, Mentsu, MentsuPai, MentsuType, Pai, PaiT}, shanten::{all_of_mentsu, PaiState}};
 use once_cell::sync::Lazy;
 
-use crate::bindings::{MJIKawahai, MJITehai, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA, MJMI_GETHAIREMAIN, MJMI_GETKAWA, MJMI_GETKAWAEX, MJMI_GETMACHI, MJMI_GETSCORE, MJMI_GETTEHAI, MJMI_GETVERSION, MJMI_GETVISIBLEHAIS};
+use crate::bindings::{MJIKawahai, MJITehai, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA, MJMI_GETHAIREMAIN, MJMI_GETKAWA, MJMI_GETKAWAEX, MJMI_GETMACHI, MJMI_GETSCORE, MJMI_GETTEHAI, MJMI_GETVERSION, MJMI_GETVISIBLEHAIS, MJMI_SETSTRUCTTYPE, MJR_NOTCARED};
 
 extern crate libc;
 
@@ -32,7 +32,7 @@ pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(|| Default::default());
 pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, param1: u32, param2: u32) -> u32 {
     let taku: &GameStateT = &G_STATE;
 
-    // println!("message flag = {:08x} param1 = {:08x} param2 = {:08x}", message, param1, param2);
+    println!("message flag = {:08x} param1 = {:08x} param2 = {:08x}", message, param1, param2);
 
     match message {
         MJMI_GETTEHAI => {
@@ -263,6 +263,7 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
         MJMI_FUKIDASHI => {
             let p_cstr: *const c_char = std::mem::transmute(param1);
             let c_str: &CStr = CStr::from_ptr(p_cstr);
+            println!("fukidashi");
 
             match c_str.to_str() {
                 Ok(str_slice) => {
@@ -292,6 +293,7 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
                 player.kawahai[0..player.kawahai_len as usize].into_iter()
             ).filter(|x| x.pai_num == param1 as u8).count() as u32
         },
+        MJMI_SETSTRUCTTYPE => MJR_NOTCARED,
         MJMI_GETSCORE => 25000,
         MJMI_GETVERSION => 12,
         _ => 0
