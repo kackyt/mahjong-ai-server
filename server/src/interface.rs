@@ -1,8 +1,18 @@
-use std::ffi::{c_void, c_char, CStr};
-use mahjong_core::{agari::{add_machi_to_mentsu, AgariBehavior}, mahjong_generated::open_mahjong::{GameStateT, MentsuFlag, Mentsu, MentsuPai, MentsuType, Pai, PaiT}, shanten::{all_of_mentsu, PaiState}};
+use mahjong_core::{
+    agari::{add_machi_to_mentsu, AgariBehavior},
+    mahjong_generated::open_mahjong::{
+        GameStateT, Mentsu, MentsuFlag, MentsuPai, MentsuType, Pai, PaiT,
+    },
+    shanten::{all_of_mentsu, PaiState},
+};
 use once_cell::sync::Lazy;
+use std::ffi::{c_char, c_void, CStr};
 
-use crate::bindings::{MJIKawahai, MJITehai, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA, MJMI_GETHAIREMAIN, MJMI_GETKAWA, MJMI_GETKAWAEX, MJMI_GETMACHI, MJMI_GETSCORE, MJMI_GETTEHAI, MJMI_GETVERSION, MJMI_GETVISIBLEHAIS, MJMI_SETSTRUCTTYPE, MJR_NOTCARED};
+use crate::bindings::{
+    MJIKawahai, MJITehai, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA, MJMI_GETHAIREMAIN,
+    MJMI_GETKAWA, MJMI_GETKAWAEX, MJMI_GETMACHI, MJMI_GETSCORE, MJMI_GETTEHAI, MJMI_GETVERSION,
+    MJMI_GETVISIBLEHAIS, MJMI_SETSTRUCTTYPE, MJR_NOTCARED,
+};
 
 extern crate libc;
 
@@ -11,7 +21,7 @@ extern crate libc;
 #[derive(Default)]
 struct Sutehai {
     hai: [u32; 18],
-    num: i32
+    num: i32,
 }
 
 #[derive(Default)]
@@ -23,16 +33,24 @@ struct Taku {
     tehai_max: i32,
     tsumohai: u32,
     kyoku: i32,
-    zikaze: i32
+    zikaze: i32,
 }
 
 // スレッドセーフではない
 pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(|| Default::default());
 
-pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, param1: u32, param2: u32) -> u32 {
+pub unsafe extern "stdcall" fn mjsend_message(
+    inst: *mut c_void,
+    message: u32,
+    param1: u32,
+    param2: u32,
+) -> u32 {
     let taku: &GameStateT = &G_STATE;
 
-    println!("message flag = {:08x} param1 = {:08x} param2 = {:08x}", message, param1, param2);
+    println!(
+        "message flag = {:08x} param1 = {:08x} param2 = {:08x}",
+        message, param1, param2
+    );
 
     match message {
         MJMI_GETTEHAI => {
@@ -45,10 +63,14 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
                     tehai.tehai[i] = player.tehai[i].pai_num as u32;
                 }
                 tehai.tehai_max = player.tehai_len as u32;
+                tehai.minkan_max = 0;
+                tehai.minkou_max = 0;
+                tehai.minshun_max = 0;
+                tehai.ankan_max = 0;
             }
 
             1
-        },
+        }
         MJMI_GETMACHI => {
             let p: *const MJITehai = std::mem::transmute(param1);
             let mut p2: *mut u32 = std::mem::transmute(param2);
@@ -62,7 +84,10 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
 
                 pstate = PaiState::from(&player.tehai[0..player.tehai_len as usize]);
 
-                v_fulo = player.mentsu[0..player.mentsu_len as usize].iter().map(|x| x.pack()).collect();
+                v_fulo = player.mentsu[0..player.mentsu_len as usize]
+                    .iter()
+                    .map(|x| x.pack())
+                    .collect();
             } else {
                 let mut tehai: Vec<PaiT> = Vec::new();
 
@@ -80,59 +105,75 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
 
                 for i in 0..(*p).minkan_max as usize {
                     let n = (*p).minkan[i] as u8;
-                    v_fulo.push(Mentsu::new(&[
-                        MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 3, MentsuFlag::FLAG_NONE),
-                    ], 4, MentsuType::TYPE_MINKAN));
+                    v_fulo.push(Mentsu::new(
+                        &[
+                            MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 3, MentsuFlag::FLAG_NONE),
+                        ],
+                        4,
+                        MentsuType::TYPE_MINKAN,
+                    ));
                 }
                 for i in 0..(*p).minkou_max as usize {
                     let n = (*p).minkou[i] as u8;
-                    v_fulo.push(Mentsu::new(&[
-                        MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
-                    ], 4, MentsuType::TYPE_KOUTSU));
+                    v_fulo.push(Mentsu::new(
+                        &[
+                            MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
+                        ],
+                        4,
+                        MentsuType::TYPE_KOUTSU,
+                    ));
                 }
                 for i in 0..(*p).minshun_max as usize {
                     let n = (*p).minshun[i] as u8;
-                    v_fulo.push(Mentsu::new(&[
-                        MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n+1, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n+2, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
-                    ], 4, MentsuType::TYPE_SHUNTSU));
+                    v_fulo.push(Mentsu::new(
+                        &[
+                            MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n + 1, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n + 2, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
+                        ],
+                        4,
+                        MentsuType::TYPE_SHUNTSU,
+                    ));
                 }
                 for i in 0..(*p).ankan_max as usize {
                     let n = (*p).ankan[i] as u8;
-                    v_fulo.push(Mentsu::new(&[
-                        MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 3, MentsuFlag::FLAG_NONE),
-                    ], 4, MentsuType::TYPE_ANKAN));
+                    v_fulo.push(Mentsu::new(
+                        &[
+                            MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 3, MentsuFlag::FLAG_NONE),
+                        ],
+                        4,
+                        MentsuType::TYPE_ANKAN,
+                    ));
                 }
             }
 
             for i in 0..34 {
                 if i >= 27 {
-                    pstate.hai_count_z[i-27] += 1;
+                    pstate.hai_count_z[i - 27] += 1;
                 } else if i >= 18 {
-                    pstate.hai_count_p[i-18] += 1;
+                    pstate.hai_count_p[i - 18] += 1;
                 } else if i >= 9 {
-                    pstate.hai_count_s[i-9] += 1;
+                    pstate.hai_count_s[i - 9] += 1;
                 } else {
                     pstate.hai_count_m[i] += 1;
                 }
                 let all_mentsu = all_of_mentsu(&mut pstate, v_fulo.len());
                 if i >= 27 {
-                    pstate.hai_count_z[i-27] -= 1;
+                    pstate.hai_count_z[i - 27] -= 1;
                 } else if i >= 18 {
-                    pstate.hai_count_p[i-18] -= 1;
+                    pstate.hai_count_p[i - 18] -= 1;
                 } else if i >= 9 {
-                    pstate.hai_count_s[i-9] -= 1;
+                    pstate.hai_count_s[i - 9] -= 1;
                 } else {
                     pstate.hai_count_m[i] -= 1;
                 }
@@ -150,14 +191,9 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
         }
         MJMI_GETAGARITEN => {
             let p: *const MJITehai = std::mem::transmute(param1);
-            let agari_pai = Pai::new(
-                param2 as u8,
-                0,
-                false,
-                false,
-                false);
+            let agari_pai = Pai::new(param2 as u8, 0, false, false, false);
 
-            let mut pstate : PaiState;
+            let mut pstate: PaiState;
             let mut v_fulo: Vec<Mentsu> = Vec::new();
 
             if p == std::ptr::null_mut() {
@@ -165,7 +201,10 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
 
                 pstate = PaiState::from(&player.tehai[0..player.tehai_len as usize]);
 
-                v_fulo = player.mentsu[0..player.mentsu_len as usize].iter().map(|x| x.pack()).collect();
+                v_fulo = player.mentsu[0..player.mentsu_len as usize]
+                    .iter()
+                    .map(|x| x.pack())
+                    .collect();
             } else {
                 let mut tehai: Vec<PaiT> = Vec::new();
 
@@ -182,57 +221,70 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
                 pstate = PaiState::from(&tehai);
                 for i in 0..(*p).minkan_max as usize {
                     let n = (*p).minkan[i] as u8;
-                    v_fulo.push(Mentsu::new(&[
-                        MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 3, MentsuFlag::FLAG_NONE),
-                    ], 4, MentsuType::TYPE_MINKAN));
+                    v_fulo.push(Mentsu::new(
+                        &[
+                            MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 3, MentsuFlag::FLAG_NONE),
+                        ],
+                        4,
+                        MentsuType::TYPE_MINKAN,
+                    ));
                 }
                 for i in 0..(*p).minkou_max as usize {
                     let n = (*p).minkou[i] as u8;
-                    v_fulo.push(Mentsu::new(&[
-                        MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
-                    ], 4, MentsuType::TYPE_KOUTSU));
+                    v_fulo.push(Mentsu::new(
+                        &[
+                            MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
+                        ],
+                        4,
+                        MentsuType::TYPE_KOUTSU,
+                    ));
                 }
                 for i in 0..(*p).minshun_max as usize {
                     let n = (*p).minshun[i] as u8;
-                    v_fulo.push(Mentsu::new(&[
-                        MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n+1, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n+2, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
-                    ], 4, MentsuType::TYPE_SHUNTSU));
+                    v_fulo.push(Mentsu::new(
+                        &[
+                            MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n + 1, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n + 2, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
+                        ],
+                        4,
+                        MentsuType::TYPE_SHUNTSU,
+                    ));
                 }
                 for i in 0..(*p).ankan_max as usize {
                     let n = (*p).ankan[i] as u8;
-                    v_fulo.push(Mentsu::new(&[
-                        MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
-                        MentsuPai::new(n, 3, MentsuFlag::FLAG_NONE),
-                    ], 4, MentsuType::TYPE_ANKAN));
+                    v_fulo.push(Mentsu::new(
+                        &[
+                            MentsuPai::new(n, 0, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 1, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 2, MentsuFlag::FLAG_NONE),
+                            MentsuPai::new(n, 3, MentsuFlag::FLAG_NONE),
+                        ],
+                        4,
+                        MentsuType::TYPE_ANKAN,
+                    ));
                 }
             }
 
             let all_mentsu = all_of_mentsu(&mut pstate, v_fulo.len());
             let all_of_mentsu_with_agari = add_machi_to_mentsu(&all_mentsu, &agari_pai);
 
-            let result = taku.get_best_agari(
-                taku.teban as usize,
-                &all_of_mentsu_with_agari,
-                &v_fulo,
-                0);
+            let result =
+                taku.get_best_agari(taku.teban as usize, &all_of_mentsu_with_agari, &v_fulo, 0);
 
             if let Ok(agari) = result {
                 agari.score as u32
             } else {
                 0
             }
-        },
+        }
         MJMI_GETKAWA => {
             let idx = (param1 & 0xFFFF) as usize;
             let player = &taku.players[idx];
@@ -244,7 +296,7 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
             }
 
             player.kawahai_len as u32
-        },
+        }
         MJMI_GETKAWAEX => {
             let idx = (param1 & 0xFFFF) as usize;
             let player = &taku.players[idx];
@@ -259,7 +311,7 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
             }
 
             player.kawahai_len as u32
-        },
+        }
         MJMI_FUKIDASHI => {
             let p_cstr: *const c_char = std::mem::transmute(param1);
             let c_str: &CStr = CStr::from_ptr(p_cstr);
@@ -267,13 +319,13 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
 
             match c_str.to_str() {
                 Ok(str_slice) => {
-                    println!("{}", str_slice);
-                },
+                    // println!("{}", str_slice);
+                }
                 _ => {}
             }
 
             0
-        },
+        }
         MJMI_GETDORA => {
             let mut p: *mut u32 = std::mem::transmute(param1);
             let dora = taku.get_dora();
@@ -282,20 +334,20 @@ pub unsafe extern "stdcall" fn mjsend_message(inst: *mut c_void, message: u32, p
                 p = p.add(1);
             }
             dora.len() as u32
-        },
-        MJMI_GETHAIREMAIN => {
-            taku.remain()
-        },
+        }
+        MJMI_GETHAIREMAIN => taku.remain(),
         MJMI_GETVISIBLEHAIS => {
             let player = &taku.players[taku.teban as usize];
 
-            player.tehai[0..player.tehai_len as usize].into_iter().chain(
-                player.kawahai[0..player.kawahai_len as usize].into_iter()
-            ).filter(|x| x.pai_num == param1 as u8).count() as u32
-        },
+            player.tehai[0..player.tehai_len as usize]
+                .into_iter()
+                .chain(player.kawahai[0..player.kawahai_len as usize].into_iter())
+                .filter(|x| x.pai_num == param1 as u8)
+                .count() as u32
+        }
         MJMI_SETSTRUCTTYPE => MJR_NOTCARED,
         MJMI_GETSCORE => 25000,
         MJMI_GETVERSION => 12,
-        _ => 0
+        _ => 0,
     }
 }
