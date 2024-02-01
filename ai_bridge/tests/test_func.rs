@@ -2,7 +2,7 @@
 mod tests {
     use std::{path::PathBuf, ptr::{null, null_mut}};
     use mahjong_core::{mahjong_generated::open_mahjong::GameStateT, shanten::PaiState};
-    use ai_bridge::{bindings::{MJITehai, MJITehai0, MJMI_GETMACHI, MJMI_GETTEHAI}, interface::{mjsend_message, G_STATE}};
+    use ai_bridge::{bindings::{MJITehai, MJITehai0, MJMI_GETMACHI, MJMI_GETTEHAI, MJMI_GETVISIBLEHAIS}, interface::{mjsend_message, G_STATE}};
 
     #[test]
     fn test_haipai_to_agari() {
@@ -71,6 +71,23 @@ mod tests {
                     std::mem::transmute(&mut machi));
 
                 assert_eq!(machi, [0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+
+                let visible_hais: Vec<usize> = (0..34).map(|num| {
+                    mjsend_message(
+                        std::ptr::null_mut(),
+                        MJMI_GETVISIBLEHAIS.try_into().unwrap(),
+                        num, 0)
+                }).collect();
+
+                assert_eq!(
+                    visible_hais,
+                    vec![
+                        2,1,1,3,0,1,1,0,0,
+                        0,0,0,0,0,0,0,0,0,
+                        0,0,0,0,0,0,1,2,1,
+                        3,0,0,0,0,0,0
+                    ]
+                )
             }
             unsafe {
                 let state = &mut G_STATE;
@@ -112,6 +129,15 @@ mod tests {
             state.load(&array);
             state.start();
             state.tsumo();
+            let mut machi = [1u32; 34];
+
+            mjsend_message(
+                std::ptr::null_mut(),
+                MJMI_GETMACHI.try_into().unwrap(),
+                0,
+                std::mem::transmute(&mut machi));
+
+            assert_eq!(machi, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
 
             let result = state.tsumo_agari();
 

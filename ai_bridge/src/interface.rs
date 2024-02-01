@@ -1,26 +1,62 @@
 use mahjong_core::{
-    agari::{add_machi_to_mentsu, AgariBehavior},
-    mahjong_generated::open_mahjong::{
+    agari::{add_machi_to_mentsu, AgariBehavior}, fbs_utils::GetTsumo, mahjong_generated::open_mahjong::{
         GameStateT, Mentsu, MentsuFlag, MentsuPai, MentsuType, Pai, PaiT,
-    },
-    shanten::{all_of_mentsu, PaiState},
+    }, shanten::{all_of_mentsu, PaiState}
 };
 use once_cell::sync::Lazy;
-use std::ffi::{c_char, c_void, CStr};
+use std::{collections::HashMap, ffi::{c_char, c_void, CStr}};
 
 use crate::bindings::{
-    MJIKawahai, MJITehai, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA, MJMI_GETHAIREMAIN,
-    MJMI_GETKAWA, MJMI_GETKAWAEX, MJMI_GETMACHI, MJMI_GETSCORE, MJMI_GETTEHAI, MJMI_GETVERSION,
-    MJMI_GETVISIBLEHAIS, MJMI_SETSTRUCTTYPE, MJR_NOTCARED,
+    MJIKawahai, MJITehai, MJITehai1, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA, MJMI_GETHAIREMAIN, MJMI_GETKAWA, MJMI_GETKAWAEX, MJMI_GETMACHI, MJMI_GETRULE, MJMI_GETSCORE, MJMI_GETTEHAI, MJMI_GETVERSION, MJMI_GETVISIBLEHAIS, MJMI_SETSTRUCTTYPE, MJRL_77MANGAN, MJRL_AKA5, MJRL_AKA5S, MJRL_BUTTOBI, MJRL_DBLRONCHONBO, MJRL_DORAPLUS, MJRL_FURITENREACH, MJRL_KANINREACH, MJRL_KANSAKI, MJRL_KARATEN, MJRL_KUINAOSHI, MJRL_KUITAN, MJRL_MOCHITEN, MJRL_NANNYU, MJRL_NANNYU_SCORE, MJRL_NOTENOYANAGARE, MJRL_PAO, MJRL_PINZUMO, MJRL_RYANSHIBA, MJRL_SCORE0REACH, MJRL_SHANYU, MJRL_SHANYU_SCORE, MJRL_TOPOYAAGARIEND, MJRL_URADORA, MJRL_WAREME, MJR_NOTCARED
 };
 
 extern crate libc;
 
 // スレッドセーフではない
-pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(|| Default::default());
+pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(Default::default);
+pub static mut G_STRUCTURE_TYPE: Lazy<HashMap<*mut c_void, usize>> = Lazy::new(HashMap::new);
+
+fn get_rule(state: &GameStateT, idx: u32) -> u32 {
+    match idx {
+        MJRL_KUITAN => state.rule.enable_kuitan as u32,
+        MJRL_KANSAKI => state.rule.enable_kansaki as u32,
+        MJRL_PAO => state.rule.enable_pao as u32,
+        MJRL_MOCHITEN => state.rule.initial_score,
+        MJRL_BUTTOBI => state.rule.enable_tobi as u32,
+        MJRL_WAREME => state.rule.enable_wareme as u32,
+        MJRL_AKA5 => if state.rule.aka_type != 0 { 1 } else { 0 },
+        MJRL_AKA5S => state.rule.aka_type as u32,
+        MJRL_SHANYU => {
+            if state.rule.shanyu_score < 0 { 1 }
+            else if state.rule.shanyu_score == 0 { 0 }
+            else { 2 }
+        },
+        MJRL_SHANYU_SCORE => state.rule.shanyu_score as u32,
+        MJRL_NANNYU => {
+            if state.rule.nannyu_score < 0 { 1 }
+            else if state.rule.nannyu_score == 0 { 0 }
+            else { 2 }
+        },
+        MJRL_NANNYU_SCORE => state.rule.nannyu_score as u32,
+        MJRL_KUINAOSHI => state.rule.enable_kuinaoshi as u32,
+        MJRL_URADORA => state.rule.uradora_type as u32,
+        MJRL_SCORE0REACH => state.rule.enable_minus_riichi as u32,
+        MJRL_RYANSHIBA => state.rule.enable_ryanhan_shibari as u32,
+        MJRL_DORAPLUS => 0,
+        MJRL_FURITENREACH => state.rule.furiten_riichi_type,
+        MJRL_KARATEN => state.rule.enable_keiten as u32,
+        MJRL_PINZUMO => 1,
+        MJRL_NOTENOYANAGARE => state.rule.oyanagare_type as u32,
+        MJRL_KANINREACH => state.rule.kan_in_riichi as u32,
+        MJRL_TOPOYAAGARIEND => state.rule.enable_agariyame as u32,
+        MJRL_77MANGAN => state.rule.enable_kiriage as u32,
+        MJRL_DBLRONCHONBO => 0,
+        _ => MJR_NOTCARED,
+    }
+}
 
 unsafe fn mjsend_message_impl(
-    _inst: *mut c_void,
+    inst: *mut c_void,
     message: usize,
     param1: usize,
     param2: usize,
@@ -33,7 +69,32 @@ unsafe fn mjsend_message_impl(
     );
 
     match message as u32 {
+        MJMI_GETRULE => get_rule(taku, param1 as u32).try_into().unwrap(),
         MJMI_GETTEHAI => {
+            let map = &G_STRUCTURE_TYPE;
+
+            let v = map.get(&inst);
+
+            if let Some(typ) = v {
+                if *typ == 1 {
+                    let tehai: &mut MJITehai1 = std::mem::transmute(param2);
+
+                    if param1 == 0 {
+                        let player = &taku.players[taku.teban as usize];
+        
+                        for i in 0..player.tehai_len as usize {
+                            tehai.tehai[i] = player.tehai[i].pai_num as u32;
+                        }
+                        tehai.tehai_max = player.tehai_len as u32;
+                        tehai.minkan_max = 0;
+                        tehai.minkou_max = 0;
+                        tehai.minshun_max = 0;
+                        tehai.ankan_max = 0;
+                    }
+        
+                    return 1;        
+                }
+            }
             let tehai: &mut MJITehai = std::mem::transmute(param2);
 
             if param1 == 0 {
@@ -253,6 +314,8 @@ unsafe fn mjsend_message_impl(
                 }
             }
 
+            pstate.append(&agari_pai.unpack());
+
             let all_mentsu = all_of_mentsu(&mut pstate, v_fulo.len());
             let all_of_mentsu_with_agari = add_machi_to_mentsu(&all_mentsu, &agari_pai);
 
@@ -322,10 +385,16 @@ unsafe fn mjsend_message_impl(
             player.tehai[0..player.tehai_len as usize]
                 .into_iter()
                 .chain(player.kawahai[0..player.kawahai_len as usize].into_iter())
+                .chain(taku.get_dora().into_iter())
+                .chain(player.get_tsumohai().iter())
                 .filter(|x| x.pai_num == param1 as u8)
                 .count()
         }
-        MJMI_SETSTRUCTTYPE => MJR_NOTCARED.try_into().unwrap(),
+        MJMI_SETSTRUCTTYPE => {
+            let map = &mut G_STRUCTURE_TYPE;
+            map.insert(inst, param1);
+            0
+        },
         MJMI_GETSCORE => 25000,
         MJMI_GETVERSION => 12,
         _ => 0,

@@ -7,7 +7,6 @@ services:
       - .:/home/app
     command: |
       bash
-#      bash -c "cargo run -p server -- /home/app/Test.dll"
     tty: true
     stdin_open: true
     cap_add:

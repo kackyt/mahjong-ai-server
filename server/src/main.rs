@@ -96,7 +96,8 @@ fn main() -> anyhow::Result<()> {
                     } else if flag == MJPIR_TSUMO {
                         let score: [i32; 4] = [0, 0, 0, 0];
                         println!("agari!!!");
-                        state.tsumo_agari().expect_err("agari error");
+                        let agari = state.tsumo_agari()?;
+                        println!("{:?}", agari.yaku);
                         is_agari = true;
                         func(inst, MJPI_ENDKYOKU.try_into().unwrap(), MJEK_RYUKYOKU.try_into().unwrap(), std::mem::transmute(score.as_ptr()));
                         break;
