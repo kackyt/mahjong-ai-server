@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{path::PathBuf, ptr::{null, null_mut}};
     use mahjong_core::{mahjong_generated::open_mahjong::GameStateT, shanten::PaiState};
+    use ai_bridge::{bindings::{MJITehai, MJITehai0, MJMI_GETMACHI, MJMI_GETTEHAI}, interface::{mjsend_message, G_STATE}};
 
     #[test]
     fn test_haipai_to_agari() {
@@ -9,12 +10,12 @@ mod tests {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/pais.txt");
         let pais = std::fs::read_to_string(path).unwrap();
         let pais_vec: Vec<u32> = pais.split(",").map(|s| s.parse().unwrap()).collect();
-        let mut state: GameStateT = Default::default();
         
         let mut array: [u32; 136] = [0; 136];
         array[..pais_vec.len()].copy_from_slice(&pais_vec);
 
-        {
+        unsafe {
+            let state = &mut G_STATE;
             state.create(b"test", 1);
             state.load(&array);
             state.start();
@@ -22,7 +23,8 @@ mod tests {
         }
         
         {
-            {
+            unsafe {
+                let state = &G_STATE;
                 let player = &state.players[state.teban as usize];
                 for p in &player.tehai {
                     print!("{}", p);
@@ -33,6 +35,63 @@ mod tests {
                 let shanten = PaiState::from(&player.tehai).get_shanten(0);
 
                 assert_eq!(shanten, 1);
+
+                let mut tehai = MJITehai::default();
+
+                mjsend_message(null_mut(), MJMI_GETTEHAI.try_into().unwrap(), 0, std::mem::transmute(&mut tehai));
+                assert_eq!(tehai.tehai_max, 13);
+            }
+
+            unsafe {
+                let state = &mut G_STATE;
+    
+                state.sutehai(8);
+                state.tsumo();
+
+                let player = &state.players[state.teban as usize];
+                for p in &player.tehai {
+                    print!("{}", p);
+                }
+
+                println!("\r");
+
+                let shanten = PaiState::from(&player.tehai).get_shanten(0);
+
+                assert_eq!(shanten, 0);
+            }
+
+            unsafe
+            {
+                let mut machi = [0u32; 34];
+
+                mjsend_message(
+                    std::ptr::null_mut(),
+                    MJMI_GETMACHI.try_into().unwrap(),
+                    0,
+                    std::mem::transmute(&mut machi));
+
+                assert_eq!(machi, [0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+            }
+            unsafe {
+                let state = &mut G_STATE;
+    
+                state.sutehai(12);
+                state.tsumo();
+
+                let player = &state.players[state.teban as usize];
+                for p in &player.tehai {
+                    print!("{}", p);
+                }
+
+                println!("\r");
+
+                let shanten = PaiState::from(&player.tehai).get_shanten(0);
+
+                assert_eq!(shanten, 0);
+
+                let result = state.tsumo_agari();
+
+                assert!(result.is_ok());
             }
         }
     }

@@ -20,7 +20,7 @@ extern crate libc;
 pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(|| Default::default());
 
 unsafe fn mjsend_message_impl(
-    inst: *mut c_void,
+    _inst: *mut c_void,
     message: usize,
     param1: usize,
     param2: usize,
@@ -59,7 +59,7 @@ unsafe fn mjsend_message_impl(
             let mut v_fulo: Vec<Mentsu> = Vec::new();
             let mut num = 0;
 
-            if p == std::ptr::null_mut() {
+            if p == std::ptr::null() {
                 let player = &taku.players[taku.teban as usize];
 
                 pstate = PaiState::from(&player.tehai[0..player.tehai_len as usize]);

@@ -215,7 +215,7 @@ pub const MJI_YAKU_MJYK_ISSHOKUYONJUN: MJI_YAKU = 45;
 pub const MJI_YAKU_MJI_YAKUS: MJI_YAKU = 46;
 pub type MJI_YAKU = ::std::os::raw::c_uint;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct MJITehai {
     pub tehai: [UINT; 14usize],
     pub tehai_max: UINT,
