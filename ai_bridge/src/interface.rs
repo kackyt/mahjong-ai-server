@@ -16,30 +16,10 @@ use crate::bindings::{
 
 extern crate libc;
 
-// (仮) 麻雀の状態管理
-#[repr(C)]
-#[derive(Default)]
-struct Sutehai {
-    hai: [u32; 18],
-    num: i32,
-}
-
-#[derive(Default)]
-struct Taku {
-    tehai: [u32; 13],
-    sutehai: [Sutehai; 4],
-    dora: [u32; 4],
-    dora_num: i32,
-    tehai_max: i32,
-    tsumohai: u32,
-    kyoku: i32,
-    zikaze: i32,
-}
-
 // スレッドセーフではない
 pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(|| Default::default());
 
-pub unsafe extern "stdcall" fn mjsend_message(
+unsafe fn mjsend_message_impl(
     inst: *mut c_void,
     message: usize,
     param1: usize,
@@ -350,4 +330,24 @@ pub unsafe extern "stdcall" fn mjsend_message(
         MJMI_GETVERSION => 12,
         _ => 0,
     }
+}
+
+#[cfg(target_os = "linux")]
+pub unsafe extern "stdcall" fn mjsend_message(
+    inst: *mut c_void,
+    message: usize,
+    param1: usize,
+    param2: usize,
+) -> usize {
+    mjsend_message_impl(inst, message, param1, param2)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub unsafe fn mjsend_message(
+    inst: *mut c_void,
+    message: usize,
+    param1: usize,
+    param2: usize,
+) -> usize {
+    mjsend_message_impl(inst, message, param1, param2)
 }

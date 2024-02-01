@@ -1,15 +1,16 @@
 [package]
-name = "server"
+name = "ai_bridge"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-load-dll = ["ai_bridge/load-dll"]
+load-dll = ["dep:loadlibrary"]
 
 [dependencies]
 anyhow = "1.0.79"
 libc = "0.2.152"
-ai_bridge = { path = "../ai_bridge" }
+loadlibrary = { path = "../loadlibrary", optional = true }
 mahjong_core = { path = "../mahjong-app-engine/mahjong_core" }
+once_cell = "1.19.0"
 sentry = "0.32.1"
