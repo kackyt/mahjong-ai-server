@@ -95,4 +95,28 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_agari_failcase() {
+        // loaddata
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/pais.txt");
+        let pais = std::fs::read_to_string(path).unwrap();
+        let pais_vec: Vec<u32> = pais.split(",").map(|s| s.parse().unwrap()).collect();
+        
+        let mut array: [u32; 136] = [0; 136];
+        array[..pais_vec.len()].copy_from_slice(&pais_vec);
+
+        unsafe {
+            let mut state = GameStateT::default();
+            state.create(b"test", 1);
+            state.load(&array);
+            state.start();
+            state.tsumo();
+
+            let result = state.tsumo_agari();
+
+            assert_eq!(result.is_err(), true);
+        }
+    }
+
 }

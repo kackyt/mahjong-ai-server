@@ -1,5 +1,5 @@
 use std::path::Path;
-use anyhow::anyhow;
+use anyhow::bail;
 use libc::c_void;
 #[cfg(feature = "load-dll")]
 use loadlibrary::win_dlopen;
@@ -14,5 +14,5 @@ pub unsafe fn get_ai_symbol(sym: &str) -> anyhow::Result<*const c_void> {
     {
         return win_dlsym(sym)
     }
-    Err(anyhow!("not implemented"))
+    bail!("not implemented")
 }
