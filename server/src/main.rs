@@ -1,20 +1,20 @@
 use std::{env, path::PathBuf, ffi::c_void};
 
-use loadlibrary::{win_dlopen, win_dlsym};
 use anyhow::ensure;
 use mahjong_core::shanten::PaiState;
 
-use crate::{bindings::{MJEK_RYUKYOKU, MJPIR_SUTEHAI, MJPIR_TSUMO, MJPI_BASHOGIME, MJPI_CREATEINSTANCE, MJPI_ENDGAME, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_ONEXCHANGE, MJPI_STARTGAME, MJPI_STARTKYOKU, MJPI_SUTEHAI, MJST_INKYOKU}, interface::mjsend_message};
+use crate::{ai_loader::{get_ai_symbol, load_ai}, bindings::{MJEK_RYUKYOKU, MJPIR_SUTEHAI, MJPIR_TSUMO, MJPI_BASHOGIME, MJPI_CREATEINSTANCE, MJPI_ENDGAME, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_ONEXCHANGE, MJPI_STARTGAME, MJPI_STARTKYOKU, MJPI_SUTEHAI, MJST_INKYOKU}, interface::mjsend_message};
 
 extern crate libc;
 
 mod bindings;
 mod interface;
+mod ai_loader;
 
-type MJPInterfaceFuncP = extern "stdcall" fn(*mut c_void, u32, u32, u32) -> u32;
+type MJPInterfaceFuncP = extern "stdcall" fn(*mut c_void, usize, usize, usize) -> usize;
 
 fn main() -> anyhow::Result<()> {
-    let _guard = sentry::init(("https://770bdeef8bbe01db0fc6d9cd9c45acc3@o4506636299010048.ingest.sentry.io/4506636301631488", sentry::ClientOptions {
+    let _guard = sentry::init((env::var("SENTRY_ENV").unwrap_or(String::from("")), sentry::ClientOptions {
         release: sentry::release_name!(),
         ..Default::default()
     }));
@@ -25,14 +25,14 @@ fn main() -> anyhow::Result<()> {
 
     let path = PathBuf::from(&args[1]);
 
-    let _ = win_dlopen(&path);
+    load_ai(&path);
 
     unsafe {
-        let func: MJPInterfaceFuncP = std::mem::transmute(win_dlsym("MJPInterfaceFunc")?);
+        let func: MJPInterfaceFuncP = std::mem::transmute(get_ai_symbol("MJPInterfaceFunc")?);
         println!("MJPInterfaceFunc :{:p}", func);
         println!("test create instance");
 
-        let size = func(std::ptr::null_mut(), MJPI_CREATEINSTANCE, 0, 0);
+        let size = func(std::ptr::null_mut(), MJPI_CREATEINSTANCE.try_into().unwrap(), 0, 0);
 
         println!("size = {}", size);
 
@@ -44,7 +44,7 @@ fn main() -> anyhow::Result<()> {
 
             ensure!(!inst.is_null(), "cannot allocate AI memory.");
 
-            let init_success = func(inst, MJPI_INITIALIZE, 0, std::mem::transmute(sendmes_ptr));
+            let init_success = func(inst, MJPI_INITIALIZE.try_into().unwrap(), 0, std::mem::transmute(sendmes_ptr));
 
             println!("init end {} {:p}", init_success, inst);
 
@@ -60,24 +60,24 @@ fn main() -> anyhow::Result<()> {
             /* 途中参加でエミュレート
             func(inst, MJPI_ONEXCHANGE, MJST_INKYOKU, 0);
             */
-            func(inst, MJPI_STARTGAME, 0, 0);
+            func(inst, MJPI_STARTGAME.try_into().unwrap(), 0, 0);
             println!("start game end");
-            func(inst, MJPI_BASHOGIME, std::mem::transmute(dummy.as_ptr()), 0);
+            func(inst, MJPI_BASHOGIME.try_into().unwrap(), std::mem::transmute(dummy.as_ptr()), 0);
             println!("bashogime end");
-            func(inst, MJPI_STARTKYOKU, 0, 0);
+            func(inst, MJPI_STARTKYOKU.try_into().unwrap(), 0, 0);
             println!("start kyoku end");
         
             let mut is_agari = false;
 
             for i in 0..18 {
-                let mut tsumohai_num: u32;
+                let mut tsumohai_num: usize;
                 {
                     let state = &mut interface::G_STATE;
                     state.tsumo();
-                    tsumohai_num = state.players[state.teban as usize].tsumohai.pai_num as u32;
+                    tsumohai_num = state.players[state.teban as usize].tsumohai.pai_num.try_into().unwrap();
                 }
 
-                let ret = func(inst, MJPI_SUTEHAI, tsumohai_num, 0);
+                let ret: u32 = func(inst, MJPI_SUTEHAI.try_into().unwrap(), tsumohai_num, 0).try_into().unwrap();
                 let index = ret & 0x3F;
                 let flag = ret & 0xFF80;
                 println!("ret = {} flag = {:04x}", index, flag);
@@ -102,7 +102,7 @@ fn main() -> anyhow::Result<()> {
                         println!("agari!!!");
                         state.tsumo_agari().expect_err("agari error");
                         is_agari = true;
-                        func(inst, MJPI_ENDKYOKU, MJEK_RYUKYOKU, std::mem::transmute(score.as_ptr()));
+                        func(inst, MJPI_ENDKYOKU.try_into().unwrap(), MJEK_RYUKYOKU.try_into().unwrap(), std::mem::transmute(score.as_ptr()));
                         break;
                     }
                 }
@@ -111,7 +111,7 @@ fn main() -> anyhow::Result<()> {
             if !is_agari {
                 println!("流局(;;)");
                 let score: [i32; 4] = [-3000, 0, 0, 0];
-                func(inst, MJPI_ENDKYOKU, MJEK_RYUKYOKU, std::mem::transmute(score.as_ptr()));
+                func(inst, MJPI_ENDKYOKU.try_into().unwrap(), MJEK_RYUKYOKU.try_into().unwrap(), std::mem::transmute(score.as_ptr()));
             }
 
             libc::free(inst);

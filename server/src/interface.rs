@@ -41,10 +41,10 @@ pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(|| Default::default());
 
 pub unsafe extern "stdcall" fn mjsend_message(
     inst: *mut c_void,
-    message: u32,
-    param1: u32,
-    param2: u32,
-) -> u32 {
+    message: usize,
+    param1: usize,
+    param2: usize,
+) -> usize {
     let taku: &GameStateT = &G_STATE;
 
     println!(
@@ -52,7 +52,7 @@ pub unsafe extern "stdcall" fn mjsend_message(
         message, param1, param2
     );
 
-    match message {
+    match message as u32 {
         MJMI_GETTEHAI => {
             let tehai: &mut MJITehai = std::mem::transmute(param2);
 
@@ -280,7 +280,7 @@ pub unsafe extern "stdcall" fn mjsend_message(
                 taku.get_best_agari(taku.teban as usize, &all_of_mentsu_with_agari, &v_fulo, 0);
 
             if let Ok(agari) = result {
-                agari.score as u32
+                agari.score.try_into().unwrap()
             } else {
                 0
             }
@@ -295,7 +295,7 @@ pub unsafe extern "stdcall" fn mjsend_message(
                 p = p.add(1);
             }
 
-            player.kawahai_len as u32
+            player.kawahai_len.try_into().unwrap()
         }
         MJMI_GETKAWAEX => {
             let idx = (param1 & 0xFFFF) as usize;
@@ -310,7 +310,7 @@ pub unsafe extern "stdcall" fn mjsend_message(
                 p = p.add(1);
             }
 
-            player.kawahai_len as u32
+            player.kawahai_len.try_into().unwrap()
         }
         MJMI_FUKIDASHI => {
             let p_cstr: *const c_char = std::mem::transmute(param1);
@@ -333,9 +333,9 @@ pub unsafe extern "stdcall" fn mjsend_message(
                 *p = dora[i].pai_num as u32;
                 p = p.add(1);
             }
-            dora.len() as u32
+            dora.len().try_into().unwrap()
         }
-        MJMI_GETHAIREMAIN => taku.remain(),
+        MJMI_GETHAIREMAIN => taku.remain().try_into().unwrap(),
         MJMI_GETVISIBLEHAIS => {
             let player = &taku.players[taku.teban as usize];
 
@@ -343,9 +343,9 @@ pub unsafe extern "stdcall" fn mjsend_message(
                 .into_iter()
                 .chain(player.kawahai[0..player.kawahai_len as usize].into_iter())
                 .filter(|x| x.pai_num == param1 as u8)
-                .count() as u32
+                .count()
         }
-        MJMI_SETSTRUCTTYPE => MJR_NOTCARED,
+        MJMI_SETSTRUCTTYPE => MJR_NOTCARED.try_into().unwrap(),
         MJMI_GETSCORE => 25000,
         MJMI_GETVERSION => 12,
         _ => 0,
