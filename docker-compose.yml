@@ -3,6 +3,8 @@ services:
   app:
     build: .
     platform: "linux/i386"
+    env_file:
+      - .env
     volumes:
       - .:/home/app
     command: |

@@ -1,7 +1,7 @@
 use std::{env, path::PathBuf, ffi::c_void};
 
 use anyhow::ensure;
-use mahjong_core::shanten::PaiState;
+use mahjong_core::{play_log, shanten::PaiState};
 
 use ai_bridge::{ai_loader::{get_ai_symbol, load_ai}, bindings::{MJEK_RYUKYOKU, MJPIR_SUTEHAI, MJPIR_TSUMO, MJPI_BASHOGIME, MJPI_CREATEINSTANCE, MJPI_ENDGAME, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_ONEXCHANGE, MJPI_STARTGAME, MJPI_STARTKYOKU, MJPI_SUTEHAI, MJST_INKYOKU}, interface::{mjsend_message, G_STATE}};
 
@@ -16,6 +16,7 @@ fn main() -> anyhow::Result<()> {
     }));
     let args: Vec<String> = env::args().collect();
     let sendmes_ptr = mjsend_message as *const();
+    let mut play_log = play_log::PlayLog::new();
 
     ensure!(args.len() >= 2, "usage: {} DLLPath", args[0]);
 
@@ -50,7 +51,7 @@ fn main() -> anyhow::Result<()> {
                 let state = &mut G_STATE;
                 state.create(b"test", 1);
                 state.shuffle();
-                state.start();
+                state.start(&mut play_log);
             }
 
             /* 途中参加でエミュレート
@@ -69,7 +70,7 @@ fn main() -> anyhow::Result<()> {
                 let mut tsumohai_num: usize;
                 {
                     let state = &mut G_STATE;
-                    state.tsumo();
+                    state.tsumo(&mut play_log);
                     tsumohai_num = state.players[state.teban as usize].tsumohai.pai_num.try_into().unwrap();
                 }
 
@@ -92,11 +93,11 @@ fn main() -> anyhow::Result<()> {
                     }
 
                     if flag == MJPIR_SUTEHAI {
-                        state.sutehai(index as usize);                        
+                        state.sutehai(&mut play_log, index as usize);                        
                     } else if flag == MJPIR_TSUMO {
                         let score: [i32; 4] = [0, 0, 0, 0];
                         println!("agari!!!");
-                        let agari = state.tsumo_agari()?;
+                        let agari = state.tsumo_agari(&mut play_log)?;
                         println!("{:?}", agari.yaku);
                         is_agari = true;
                         func(inst, MJPI_ENDKYOKU.try_into().unwrap(), MJEK_RYUKYOKU.try_into().unwrap(), std::mem::transmute(score.as_ptr()));
@@ -109,7 +110,11 @@ fn main() -> anyhow::Result<()> {
                 println!("流局(;;)");
                 let score: [i32; 4] = [-3000, 0, 0, 0];
                 func(inst, MJPI_ENDKYOKU.try_into().unwrap(), MJEK_RYUKYOKU.try_into().unwrap(), std::mem::transmute(score.as_ptr()));
+                let state = &mut G_STATE;
+                state.nagare(&mut play_log);
             }
+
+            play_log.write_to_parquet(env::current_dir()?)?;
 
             libc::free(inst);
         }

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use std::{path::PathBuf, ptr::{null, null_mut}};
-    use mahjong_core::{mahjong_generated::open_mahjong::GameStateT, shanten::PaiState};
+    use mahjong_core::{mahjong_generated::open_mahjong::GameStateT, play_log, shanten::PaiState};
     use ai_bridge::{bindings::{MJITehai, MJITehai0, MJMI_GETMACHI, MJMI_GETTEHAI, MJMI_GETVISIBLEHAIS}, interface::{mjsend_message, G_STATE}};
 
     #[test]
@@ -10,6 +10,7 @@ mod tests {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/pais.txt");
         let pais = std::fs::read_to_string(path).unwrap();
         let pais_vec: Vec<u32> = pais.split(",").map(|s| s.parse().unwrap()).collect();
+        let mut play_log = play_log::PlayLog::new();
         
         let mut array: [u32; 136] = [0; 136];
         array[..pais_vec.len()].copy_from_slice(&pais_vec);
@@ -18,8 +19,8 @@ mod tests {
             let state = &mut G_STATE;
             state.create(b"test", 1);
             state.load(&array);
-            state.start();
-            state.tsumo();
+            state.start(&mut play_log);
+            state.tsumo(&mut play_log);
         }
         
         {
@@ -45,8 +46,8 @@ mod tests {
             unsafe {
                 let state = &mut G_STATE;
     
-                state.sutehai(8);
-                state.tsumo();
+                state.sutehai(&mut play_log, 8);
+                state.tsumo(&mut play_log);
 
                 let player = &state.players[state.teban as usize];
                 for p in &player.tehai {
@@ -92,8 +93,8 @@ mod tests {
             unsafe {
                 let state = &mut G_STATE;
     
-                state.sutehai(12);
-                state.tsumo();
+                state.sutehai(&mut play_log, 12);
+                state.tsumo(&mut play_log);
 
                 let player = &state.players[state.teban as usize];
                 for p in &player.tehai {
@@ -106,7 +107,7 @@ mod tests {
 
                 assert_eq!(shanten, 0);
 
-                let result = state.tsumo_agari();
+                let result = state.tsumo_agari(&mut play_log);
 
                 assert!(result.is_ok());
             }
@@ -115,6 +116,7 @@ mod tests {
 
     #[test]
     fn test_agari_failcase() {
+        let mut play_log = play_log::PlayLog::new();
         // loaddata
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/pais.txt");
         let pais = std::fs::read_to_string(path).unwrap();
@@ -127,8 +129,8 @@ mod tests {
             let mut state = GameStateT::default();
             state.create(b"test", 1);
             state.load(&array);
-            state.start();
-            state.tsumo();
+            state.start(&mut play_log);
+            state.tsumo(&mut play_log);
             let mut machi = [1u32; 34];
 
             mjsend_message(
@@ -139,7 +141,7 @@ mod tests {
 
             assert_eq!(machi, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
 
-            let result = state.tsumo_agari();
+            let result = state.tsumo_agari(&mut play_log);
 
             assert_eq!(result.is_err(), true);
         }
