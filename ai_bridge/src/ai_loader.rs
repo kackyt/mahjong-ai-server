@@ -1,0 +1,18 @@
+use std::path::Path;
+use anyhow::bail;
+use libc::c_void;
+#[cfg(feature = "load-dll")]
+use loadlibrary::{win_dlopen, win_dlsym};
+
+pub fn load_ai<P: AsRef<Path>>(path: &P) {
+    #[cfg(feature = "load-dll")]
+    win_dlopen(path);
+}
+
+pub unsafe fn get_ai_symbol(sym: &str) -> anyhow::Result<*const c_void> {
+    #[cfg(feature = "load-dll")]
+    {
+        return win_dlsym(sym)
+    }
+    bail!("not implemented")
+}
