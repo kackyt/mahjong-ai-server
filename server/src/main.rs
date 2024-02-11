@@ -6,9 +6,9 @@ use mahjong_core::{play_log, shanten::PaiState};
 use ai_bridge::{
     ai_loader::{get_ai_symbol, load_ai},
     bindings::{
-        MJEK_RYUKYOKU, MJPIR_SUTEHAI, MJPIR_TSUMO, MJPI_BASHOGIME, MJPI_CREATEINSTANCE,
-        MJPI_ENDGAME, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_ONEXCHANGE, MJPI_STARTGAME,
-        MJPI_STARTKYOKU, MJPI_SUTEHAI, MJST_INKYOKU,
+        MJEK_RYUKYOKU, MJPIR_REACH, MJPIR_SUTEHAI, MJPIR_TSUMO, MJPI_BASHOGIME,
+        MJPI_CREATEINSTANCE, MJPI_ENDGAME, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_ONEXCHANGE,
+        MJPI_STARTGAME, MJPI_STARTKYOKU, MJPI_SUTEHAI, MJST_INKYOKU,
     },
     interface::{mjsend_message, G_STATE},
 };
@@ -126,7 +126,9 @@ fn main() -> anyhow::Result<()> {
                     }
 
                     if flag == MJPIR_SUTEHAI {
-                        state.sutehai(&mut play_log, index as usize);
+                        state.sutehai(&mut play_log, index as usize, false);
+                    } else if flag == MJPIR_REACH {
+                        state.sutehai(&mut play_log, index as usize, true);
                     } else if flag == MJPIR_TSUMO {
                         let score: [i32; 4] = [0, 0, 0, 0];
                         println!("agari!!!");
