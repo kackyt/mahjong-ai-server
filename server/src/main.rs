@@ -71,7 +71,7 @@ fn main() -> anyhow::Result<()> {
 
             {
                 let state = &mut G_STATE;
-                state.create(b"test", 1);
+                state.create(b"test", 1, &mut play_log);
                 state.shuffle();
                 state.start(&mut play_log);
             }
