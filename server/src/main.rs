@@ -1,6 +1,7 @@
 use std::{env, ffi::c_void, path::PathBuf};
 
 use anyhow::ensure;
+use clap::Parser;
 use mahjong_core::{play_log, shanten::PaiState};
 
 use ai_bridge::{
@@ -17,26 +18,22 @@ extern crate libc;
 
 type MJPInterfaceFuncP = extern "stdcall" fn(*mut c_void, usize, usize, usize) -> usize;
 
-
+#[derive(Parser, Debug)]
+#[command(author, about, version)]
 struct Command {
-    
+    #[arg(short, long)]
+    log_path: String,
+    #[arg(short, long)]
+    input_dll: String,
+    //    #[arg(long)]
+    //    from_env: bool,
 }
 
-fn main() -> anyhow::Result<()> {
-    let _guard = sentry::init((
-        env::var("SENTRY_ENV").unwrap_or(String::from("")),
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            ..Default::default()
-        },
-    ));
-    let args: Vec<String> = env::args().collect();
+fn cmd(args: &Command) -> anyhow::Result<()> {
     let sendmes_ptr = mjsend_message as *const ();
     let mut play_log = play_log::PlayLog::new();
 
-    ensure!(args.len() >= 2, "usage: {} DLLPath", args[0]);
-
-    let path = PathBuf::from(&args[1]);
+    let path = PathBuf::from(&args.input_dll);
 
     let handle = load_ai(&path)?;
 
@@ -164,7 +161,7 @@ fn main() -> anyhow::Result<()> {
                 state.nagare(&mut play_log);
             }
 
-            play_log.write_to_parquet(env::current_dir()?)?;
+            play_log.write_to_parquet(&args.log_path)?;
 
             libc::free(inst);
         }
@@ -173,4 +170,18 @@ fn main() -> anyhow::Result<()> {
     println!("end.");
 
     Ok(())
+}
+
+fn main() {
+    let _ = dotenv::dotenv();
+    let args = Command::parse();
+    let _guard = sentry::init((
+        env::var("SENTRY_DSN").unwrap_or(String::from("")),
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            ..Default::default()
+        },
+    ));
+
+    cmd(&args).unwrap();
 }
