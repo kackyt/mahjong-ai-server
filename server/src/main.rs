@@ -17,6 +17,11 @@ extern crate libc;
 
 type MJPInterfaceFuncP = extern "stdcall" fn(*mut c_void, usize, usize, usize) -> usize;
 
+
+struct Command {
+    
+}
+
 fn main() -> anyhow::Result<()> {
     let _guard = sentry::init((
         env::var("SENTRY_ENV").unwrap_or(String::from("")),
