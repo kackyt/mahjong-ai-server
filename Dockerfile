@@ -9,7 +9,7 @@ COPY . ${HOME}
 WORKDIR ${HOME}
 RUN cargo build -p server --release --features load-dll
 
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim as runtime
 ENV APP_PATH /opt/apps
 
 COPY ./install.sh .

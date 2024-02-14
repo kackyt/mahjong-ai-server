@@ -1,12 +1,15 @@
 version: "3.9"
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
     platform: "linux/i386"
     env_file:
       - .env
     volumes:
-      - .:/home/app
+      - .:/home/app_copy
     entrypoint: ["/bin/bash", "-c"]
     command: |
       bash

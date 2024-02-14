@@ -87,6 +87,7 @@ unsafe fn mjsend_message_impl(
     message: usize,
     param1: usize,
     param2: usize,
+    pstate: &mut PaiState,
 ) -> usize {
     let taku: &GameStateT = &G_STATE;
 
@@ -143,14 +144,13 @@ unsafe fn mjsend_message_impl(
             let p: *const MJITehai = std::mem::transmute(param1);
             let mut p2: *mut u32 = std::mem::transmute(param2);
 
-            let mut pstate: PaiState;
             let mut v_fulo: Vec<Mentsu> = Vec::new();
             let mut num = 0;
 
             if p == std::ptr::null() {
                 let player = &taku.players[taku.teban as usize];
 
-                pstate = PaiState::from(&player.tehai[0..player.tehai_len as usize]);
+                pstate.init(&player.tehai[0..player.tehai_len as usize]);
 
                 v_fulo = player.mentsu[0..player.mentsu_len as usize]
                     .iter()
@@ -169,7 +169,7 @@ unsafe fn mjsend_message_impl(
                     });
                 }
 
-                pstate = PaiState::from(&tehai);
+                pstate.init(&tehai);
 
                 for i in 0..(*p).minkan_max as usize {
                     let n = (*p).minkan[i] as u8;
@@ -235,7 +235,7 @@ unsafe fn mjsend_message_impl(
                 } else {
                     pstate.hai_count_m[i] += 1;
                 }
-                let all_mentsu = all_of_mentsu(&mut pstate, v_fulo.len());
+                let all_mentsu = all_of_mentsu(pstate, v_fulo.len());
                 if i >= 27 {
                     pstate.hai_count_z[i - 27] -= 1;
                 } else if i >= 18 {
@@ -261,13 +261,12 @@ unsafe fn mjsend_message_impl(
             let p: *const MJITehai = std::mem::transmute(param1);
             let agari_pai = Pai::new(param2 as u8, 0, false, false, false);
 
-            let mut pstate: PaiState;
             let mut v_fulo: Vec<Mentsu> = Vec::new();
 
             if p == std::ptr::null_mut() {
                 let player = &taku.players[taku.teban as usize];
 
-                pstate = PaiState::from(&player.tehai[0..player.tehai_len as usize]);
+                pstate.init(&player.tehai[0..player.tehai_len as usize]);
 
                 v_fulo = player.mentsu[0..player.mentsu_len as usize]
                     .iter()
@@ -286,7 +285,7 @@ unsafe fn mjsend_message_impl(
                     });
                 }
 
-                pstate = PaiState::from(&tehai);
+                pstate.init(&tehai);
                 for i in 0..(*p).minkan_max as usize {
                     let n = (*p).minkan[i] as u8;
                     v_fulo.push(Mentsu::new(
@@ -343,7 +342,7 @@ unsafe fn mjsend_message_impl(
 
             pstate.append(&agari_pai.unpack());
 
-            let all_mentsu = all_of_mentsu(&mut pstate, v_fulo.len());
+            let all_mentsu = all_of_mentsu(pstate, v_fulo.len());
             let all_of_mentsu_with_agari = add_machi_to_mentsu(&all_mentsu, &agari_pai);
 
             let result =
@@ -435,15 +434,21 @@ pub unsafe extern "stdcall" fn mjsend_message(
     param1: usize,
     param2: usize,
 ) -> usize {
-    mjsend_message_impl(inst, message, param1, param2)
+    use std::mem::MaybeUninit;
+
+    let mut array: [MaybeUninit<u8>; std::mem::size_of::<PaiState>()] =
+        MaybeUninit::uninit().assume_init();
+    let mut pstate = std::ptr::read(array.as_mut_ptr() as *mut PaiState);
+    mjsend_message_impl(inst, message, param1, param2, &mut pstate)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub unsafe fn mjsend_message(
     inst: *mut c_void,
     message: usize,
     param1: usize,
     param2: usize,
 ) -> usize {
-    mjsend_message_impl(inst, message, param1, param2)
+    let mut pstate = PaiState::default();
+    mjsend_message_impl(inst, message, param1, param2, &mut pstate)
 }
