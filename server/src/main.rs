@@ -175,7 +175,7 @@ fn cmd(args: &Command) -> anyhow::Result<()> {
             println!("bashogime end");
 
             if let Some(paiyama_path) = &args.paiyama_path {
-                let paiyama_batch = play_log::PaiyamaBatch::new(paiyama_path)?;
+                let paiyama_batch = play_log::PaiyamaBatch::new(paiyama_path);
 
                 for paiyama_r in paiyama_batch {
                     let paiyama = paiyama_r?;

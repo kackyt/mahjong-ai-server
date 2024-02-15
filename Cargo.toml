@@ -7,3 +7,6 @@ members = [
     "ai_bridge",
     "mahjong-app-engine/mahjong_core",
 ]
+
+# [profile.release]
+# debug = true

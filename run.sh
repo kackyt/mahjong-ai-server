@@ -1,3 +1,3 @@
 #!/bin/bash
 
-cargo run -p server
+./server -i target.dll -l ./logs -p ./pailist
