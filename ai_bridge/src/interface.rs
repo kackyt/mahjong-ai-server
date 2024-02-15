@@ -91,10 +91,12 @@ unsafe fn mjsend_message_impl(
 ) -> usize {
     let taku: &GameStateT = &G_STATE;
 
+    /*
     println!(
         "message flag = {:08x} param1 = {:08x} param2 = {:08x}",
         message, param1, param2
     );
+     */
 
     match message as u32 {
         MJMI_GETRULE => get_rule(taku, param1 as u32).try_into().unwrap(),
