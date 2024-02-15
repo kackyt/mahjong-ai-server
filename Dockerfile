@@ -13,13 +13,13 @@ FROM debian:bookworm-slim as runtime
 ENV APP_PATH /opt/apps
 
 COPY ./install.sh .
-COPY ./run.sh .
 RUN set -e && bash ./install.sh
 
 USER app
-
-COPY --from=builder /home/app/target/release/server ${APP_PATH}/server
 WORKDIR ${APP_PATH}
 
+COPY --from=builder /home/app/target/release/server ${APP_PATH}/server
+COPY ./run.sh ${APP_PATH}
+
 ENTRYPOINT [ "bash", "-c" ]
-CMD [ "bash run.sh" ]
+CMD [ "bash ./run.sh" ]
