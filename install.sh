@@ -2,7 +2,12 @@
 
 set -e
 
-groupadd -r app && useradd -r -g app app
+groupadd -r -g 1000 app && useradd -r -u 1000 -m -s /bin/bash -g app app
+mkdir -p /usr/share/man/man1
+
+mkdir -p /home/app/.config/gcloud/configurations
+chown -R app:app /home/app/.config
+chmod -R 700 /home/app/.config
 
 # echo deb http://ftp.us.debian.org/debian/ bookworm main contrib non-free >> /etc/apt/sources.list
 # echo deb http://ftp.us.debian.org/debian/ bookworm-proposed-updates main contrib  non-free >> /etc/apt/sources.list
@@ -24,8 +29,6 @@ curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /
 apt-get update -y
 apt-get install google-cloud-sdk -y --no-install-recommends
 
+
 rm -rf /var/lib/apt/lists/*
 apt-get clean
-
-mkdir -p ${APP_PATH}
-chown app:app ${APP_PATH} -R
