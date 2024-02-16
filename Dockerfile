@@ -1,35 +1,25 @@
-FROM kackyt/rust-cmake-devel:0.3.0
+FROM kackyt/rust-cmake-devel:0.4.0 as builder
 
-ENV APP_PATH /opt/apps
 ENV DEBIAN_FRONTEND noninteractive
 ENV HOME /home/app
 
-USER root
+USER app
 
-COPY . ${APP_PATH}
-WORKDIR ${APP_PATH}
+COPY . ${HOME}
+WORKDIR ${HOME}
+RUN cargo build -p server --release --features load-dll
 
-RUN apt-get install -y pkg-config
-RUN apt-get install -y \
-    curl \
+FROM debian:bookworm-slim as runtime
+ENV APP_PATH /opt/apps
 
-    python3-crcmod \
-    apt-transport-https \
-    lsb-release \
-    openssh-client \ 
-    gnupg
-
-# Cloud SDKインストール
-RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
-    apt-get update -y && \
-    apt-get install google-cloud-sdk -y
-
-RUN chown app:app ${APP_PATH} -R
+COPY ./install.sh .
+RUN set -e && bash ./install.sh
 
 USER app
 WORKDIR ${APP_PATH}
-RUN cargo build -p server
 
-ENTRYPOINT [ "/bin/sh", "-c" ]
-CMD ["cargo run -p server ${APP_PATH}/Test.dll"]
+COPY --from=builder /home/app/target/release/server ${APP_PATH}/server
+COPY ./run.sh ${APP_PATH}
+
+ENTRYPOINT [ "bash", "-c" ]
+CMD [ "bash ./run.sh" ]

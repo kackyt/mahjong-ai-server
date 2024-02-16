@@ -1,13 +1,26 @@
 use mahjong_core::{
-    agari::{add_machi_to_mentsu, AgariBehavior}, fbs_utils::GetTsumo, mahjong_generated::open_mahjong::{
+    agari::{add_machi_to_mentsu, AgariBehavior},
+    fbs_utils::GetTsumo,
+    mahjong_generated::open_mahjong::{
         GameStateT, Mentsu, MentsuFlag, MentsuPai, MentsuType, Pai, PaiT,
-    }, shanten::{all_of_mentsu, PaiState}
+    },
+    shanten::{all_of_mentsu, PaiState},
 };
 use once_cell::sync::Lazy;
-use std::{collections::HashMap, ffi::{c_char, c_void, CStr}};
+use std::{
+    collections::HashMap,
+    ffi::{c_char, c_void, CStr},
+};
 
 use crate::bindings::{
-    MJIKawahai, MJITehai, MJITehai1, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA, MJMI_GETHAIREMAIN, MJMI_GETKAWA, MJMI_GETKAWAEX, MJMI_GETMACHI, MJMI_GETRULE, MJMI_GETSCORE, MJMI_GETTEHAI, MJMI_GETVERSION, MJMI_GETVISIBLEHAIS, MJMI_SETSTRUCTTYPE, MJRL_77MANGAN, MJRL_AKA5, MJRL_AKA5S, MJRL_BUTTOBI, MJRL_DBLRONCHONBO, MJRL_DORAPLUS, MJRL_FURITENREACH, MJRL_KANINREACH, MJRL_KANSAKI, MJRL_KARATEN, MJRL_KUINAOSHI, MJRL_KUITAN, MJRL_MOCHITEN, MJRL_NANNYU, MJRL_NANNYU_SCORE, MJRL_NOTENOYANAGARE, MJRL_PAO, MJRL_PINZUMO, MJRL_RYANSHIBA, MJRL_SCORE0REACH, MJRL_SHANYU, MJRL_SHANYU_SCORE, MJRL_TOPOYAAGARIEND, MJRL_URADORA, MJRL_WAREME, MJR_NOTCARED
+    MJIKawahai, MJITehai, MJITehai1, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA,
+    MJMI_GETHAIREMAIN, MJMI_GETKAWA, MJMI_GETKAWAEX, MJMI_GETMACHI, MJMI_GETRULE, MJMI_GETSCORE,
+    MJMI_GETTEHAI, MJMI_GETVERSION, MJMI_GETVISIBLEHAIS, MJMI_SETSTRUCTTYPE, MJRL_77MANGAN,
+    MJRL_AKA5, MJRL_AKA5S, MJRL_BUTTOBI, MJRL_DBLRONCHONBO, MJRL_DORAPLUS, MJRL_FURITENREACH,
+    MJRL_KANINREACH, MJRL_KANSAKI, MJRL_KARATEN, MJRL_KUINAOSHI, MJRL_KUITAN, MJRL_MOCHITEN,
+    MJRL_NANNYU, MJRL_NANNYU_SCORE, MJRL_NOTENOYANAGARE, MJRL_PAO, MJRL_PINZUMO, MJRL_RYANSHIBA,
+    MJRL_SCORE0REACH, MJRL_SHANYU, MJRL_SHANYU_SCORE, MJRL_TOPOYAAGARIEND, MJRL_URADORA,
+    MJRL_WAREME, MJR_NOTCARED,
 };
 
 extern crate libc;
@@ -24,19 +37,33 @@ fn get_rule(state: &GameStateT, idx: u32) -> u32 {
         MJRL_MOCHITEN => state.rule.initial_score,
         MJRL_BUTTOBI => state.rule.enable_tobi as u32,
         MJRL_WAREME => state.rule.enable_wareme as u32,
-        MJRL_AKA5 => if state.rule.aka_type != 0 { 1 } else { 0 },
+        MJRL_AKA5 => {
+            if state.rule.aka_type != 0 {
+                1
+            } else {
+                0
+            }
+        }
         MJRL_AKA5S => state.rule.aka_type as u32,
         MJRL_SHANYU => {
-            if state.rule.shanyu_score < 0 { 1 }
-            else if state.rule.shanyu_score == 0 { 0 }
-            else { 2 }
-        },
+            if state.rule.shanyu_score < 0 {
+                1
+            } else if state.rule.shanyu_score == 0 {
+                0
+            } else {
+                2
+            }
+        }
         MJRL_SHANYU_SCORE => state.rule.shanyu_score as u32,
         MJRL_NANNYU => {
-            if state.rule.nannyu_score < 0 { 1 }
-            else if state.rule.nannyu_score == 0 { 0 }
-            else { 2 }
-        },
+            if state.rule.nannyu_score < 0 {
+                1
+            } else if state.rule.nannyu_score == 0 {
+                0
+            } else {
+                2
+            }
+        }
         MJRL_NANNYU_SCORE => state.rule.nannyu_score as u32,
         MJRL_KUINAOSHI => state.rule.enable_kuinaoshi as u32,
         MJRL_URADORA => state.rule.uradora_type as u32,
@@ -60,13 +87,16 @@ unsafe fn mjsend_message_impl(
     message: usize,
     param1: usize,
     param2: usize,
+    pstate: &mut PaiState,
 ) -> usize {
     let taku: &GameStateT = &G_STATE;
 
+    /*
     println!(
         "message flag = {:08x} param1 = {:08x} param2 = {:08x}",
         message, param1, param2
     );
+     */
 
     match message as u32 {
         MJMI_GETRULE => get_rule(taku, param1 as u32).try_into().unwrap(),
@@ -81,7 +111,7 @@ unsafe fn mjsend_message_impl(
 
                     if param1 == 0 {
                         let player = &taku.players[taku.teban as usize];
-        
+
                         for i in 0..player.tehai_len as usize {
                             tehai.tehai[i] = player.tehai[i].pai_num as u32;
                         }
@@ -91,8 +121,8 @@ unsafe fn mjsend_message_impl(
                         tehai.minshun_max = 0;
                         tehai.ankan_max = 0;
                     }
-        
-                    return 1;        
+
+                    return 1;
                 }
             }
             let tehai: &mut MJITehai = std::mem::transmute(param2);
@@ -116,14 +146,13 @@ unsafe fn mjsend_message_impl(
             let p: *const MJITehai = std::mem::transmute(param1);
             let mut p2: *mut u32 = std::mem::transmute(param2);
 
-            let mut pstate: PaiState;
             let mut v_fulo: Vec<Mentsu> = Vec::new();
             let mut num = 0;
 
             if p == std::ptr::null() {
                 let player = &taku.players[taku.teban as usize];
 
-                pstate = PaiState::from(&player.tehai[0..player.tehai_len as usize]);
+                pstate.init(&player.tehai[0..player.tehai_len as usize]);
 
                 v_fulo = player.mentsu[0..player.mentsu_len as usize]
                     .iter()
@@ -142,7 +171,7 @@ unsafe fn mjsend_message_impl(
                     });
                 }
 
-                pstate = PaiState::from(&tehai);
+                pstate.init(&tehai);
 
                 for i in 0..(*p).minkan_max as usize {
                     let n = (*p).minkan[i] as u8;
@@ -208,7 +237,7 @@ unsafe fn mjsend_message_impl(
                 } else {
                     pstate.hai_count_m[i] += 1;
                 }
-                let all_mentsu = all_of_mentsu(&mut pstate, v_fulo.len());
+                let all_mentsu = all_of_mentsu(pstate, v_fulo.len());
                 if i >= 27 {
                     pstate.hai_count_z[i - 27] -= 1;
                 } else if i >= 18 {
@@ -234,13 +263,12 @@ unsafe fn mjsend_message_impl(
             let p: *const MJITehai = std::mem::transmute(param1);
             let agari_pai = Pai::new(param2 as u8, 0, false, false, false);
 
-            let mut pstate: PaiState;
             let mut v_fulo: Vec<Mentsu> = Vec::new();
 
             if p == std::ptr::null_mut() {
                 let player = &taku.players[taku.teban as usize];
 
-                pstate = PaiState::from(&player.tehai[0..player.tehai_len as usize]);
+                pstate.init(&player.tehai[0..player.tehai_len as usize]);
 
                 v_fulo = player.mentsu[0..player.mentsu_len as usize]
                     .iter()
@@ -259,7 +287,7 @@ unsafe fn mjsend_message_impl(
                     });
                 }
 
-                pstate = PaiState::from(&tehai);
+                pstate.init(&tehai);
                 for i in 0..(*p).minkan_max as usize {
                     let n = (*p).minkan[i] as u8;
                     v_fulo.push(Mentsu::new(
@@ -316,7 +344,7 @@ unsafe fn mjsend_message_impl(
 
             pstate.append(&agari_pai.unpack());
 
-            let all_mentsu = all_of_mentsu(&mut pstate, v_fulo.len());
+            let all_mentsu = all_of_mentsu(pstate, v_fulo.len());
             let all_of_mentsu_with_agari = add_machi_to_mentsu(&all_mentsu, &agari_pai);
 
             let result =
@@ -394,29 +422,35 @@ unsafe fn mjsend_message_impl(
             let map = &mut G_STRUCTURE_TYPE;
             map.insert(inst, param1);
             0
-        },
+        }
         MJMI_GETSCORE => 25000,
         MJMI_GETVERSION => 12,
         _ => 0,
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub unsafe extern "stdcall" fn mjsend_message(
     inst: *mut c_void,
     message: usize,
     param1: usize,
     param2: usize,
 ) -> usize {
-    mjsend_message_impl(inst, message, param1, param2)
+    use std::mem::MaybeUninit;
+
+    let mut array: [MaybeUninit<u8>; std::mem::size_of::<PaiState>()] =
+        MaybeUninit::uninit().assume_init();
+    let mut pstate = std::ptr::read(array.as_mut_ptr() as *mut PaiState);
+    mjsend_message_impl(inst, message, param1, param2, &mut pstate)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub unsafe fn mjsend_message(
     inst: *mut c_void,
     message: usize,
     param1: usize,
     param2: usize,
 ) -> usize {
-    mjsend_message_impl(inst, message, param1, param2)
+    let mut pstate = PaiState::default();
+    mjsend_message_impl(inst, message, param1, param2, &mut pstate)
 }
