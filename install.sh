@@ -6,8 +6,12 @@ groupadd -r -g 1000 app && useradd -r -u 1000 -m -s /bin/bash -g app app
 mkdir -p /usr/share/man/man1
 
 mkdir -p /home/app/.config/gcloud/configurations
-chown -R app:app /home/app/.config
+chown -R app:app /home/app
 chmod -R 700 /home/app/.config
+
+mkdir ${APP_PATH}
+chown -R app:app ${APP_PATH}
+chmod -R 700 ${APP_PATH}
 
 # echo deb http://ftp.us.debian.org/debian/ bookworm main contrib non-free >> /etc/apt/sources.list
 # echo deb http://ftp.us.debian.org/debian/ bookworm-proposed-updates main contrib  non-free >> /etc/apt/sources.list

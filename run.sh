@@ -1,5 +1,7 @@
 #!/bin/bash
 
+mkdir paiyama
+
 gcloud storage cp ${AI_DOWNLOAD_URL} ./target.dll
 gcloud storage cp ${PAIYAMA_DOWNLOAD_URL} ./paiyama --recursive
 
