@@ -27,8 +27,6 @@ struct Command {
     input_dll: String,
     #[arg(short, long)]
     paiyama_path: Option<String>,
-    //    #[arg(long)]
-    //    from_env: bool,
 }
 
 unsafe fn experiment(func: MJPInterfaceFuncP, inst: *mut c_void, play_log: &mut play_log::PlayLog) {
