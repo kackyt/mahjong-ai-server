@@ -6,6 +6,7 @@ members = [
     "server",
     "ai_bridge",
     "mahjong-app-engine/mahjong_core",
+    "app"
 ]
 
 # [profile.release]
