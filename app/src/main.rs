@@ -1,7 +1,8 @@
 use ai_bridge::interface::G_STATE;
 use iced::{
+    executor,
     widget::{button, column, container, image, Row, Space},
-    Element, Sandbox
+    Application, Command, Element,
 };
 use log::{debug, info};
 use mahjong_core::play_log;
@@ -111,12 +112,12 @@ impl App {
     }
 }
 
-impl Sandbox for App {
+impl Application for App {
     fn title(&self) -> String {
         String::from("openmahjong sample app")
     }
 
-    fn update(&mut self, event: Message) {
+    fn update(&mut self, event: Message) -> Command<Message> {
         match event {
             Message::Start => unsafe {
                 let state = &mut G_STATE;
@@ -127,6 +128,7 @@ impl Sandbox for App {
                 state.start(&mut self.play_log);
                 state.tsumo(&mut self.play_log);
                 self.state = AppState::Started;
+                Command::none()
             },
             Message::Dahai(index) => unsafe {
                 let state = &mut G_STATE;
@@ -139,6 +141,7 @@ impl Sandbox for App {
                 }
                 state.sutehai(&mut self.play_log, index, false);
                 state.tsumo(&mut self.play_log);
+                Command::none()
             },
         }
     }
@@ -161,12 +164,21 @@ impl Sandbox for App {
 
     type Message = Message;
 
-    fn new() -> App {
-        App {
-            play_log: play_log::PlayLog::new(),
-            state: AppState::Created,
-        }
+    fn new(_flags: ()) -> (Self, Command<Message>) {
+        (
+            App {
+                play_log: play_log::PlayLog::new(),
+                state: AppState::Created,
+            },
+            Command::none(),
+        )
     }
+
+    type Executor = executor::Default;
+
+    type Theme = iced::Theme;
+
+    type Flags = ();
 }
 
 fn main() -> iced::Result {
