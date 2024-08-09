@@ -1,7 +1,7 @@
 use ai_bridge::interface::G_STATE;
 use iced::{
     executor,
-    widget::{button, column, container, image, Row, Space},
+    widget::{button, column, container, image, row, text_input, Row, Space},
     Application, Command, Element,
 };
 use log::{debug, info};
@@ -10,6 +10,9 @@ use mahjong_core::play_log;
 struct App {
     play_log: play_log::PlayLog,
     state: AppState,
+    is_riichi: bool,
+    font_loaded: bool,
+    input_value: String,
 }
 
 enum AppState {
@@ -21,6 +24,10 @@ enum AppState {
 pub enum Message {
     Start,
     Dahai(usize),
+    Tsumo,
+    Riichi,
+    FontLoaded,
+    InputChanged(String),
 }
 
 fn painum2path(painum: u32) -> String {
@@ -112,6 +119,8 @@ impl App {
     }
 }
 
+const FONT_BYTES: &'static [u8] = include_bytes!("../fonts/Mamelon-5-Hi-Regular.otf");
+
 impl Application for App {
     fn title(&self) -> String {
         String::from("openmahjong sample app")
@@ -143,6 +152,19 @@ impl Application for App {
                 state.tsumo(&mut self.play_log);
                 Command::none()
             },
+            Message::Tsumo => Command::none(),
+            Message::Riichi => {
+                self.is_riichi = !self.is_riichi;
+                Command::none()
+            }
+            Message::FontLoaded => {
+                self.font_loaded = true;
+                Command::none()
+            }
+            Message::InputChanged(value) => {
+                self.input_value = value;
+                Command::none()
+            }
         }
     }
 
@@ -150,11 +172,17 @@ impl Application for App {
         unsafe {
             let content: Element<_> = column![
                 button("Start").on_press(Message::Start),
-                Space::new(0, 10),
+                text_input("Type something", &self.input_value).on_input(Message::InputChanged),
                 Row::from_vec(self.kawahai()),
-                Space::new(0, 10),
-                Row::from_vec(self.tehai())
+                Row::from_vec(self.tehai()),
             ]
+            .push_maybe(self.font_loaded.then(|| {
+                row![
+                    button("ツモ").on_press(Message::Tsumo),
+                    button("リーチ").on_press(Message::Riichi)
+                ]
+            }))
+            .spacing(10)
             .padding(10)
             .into();
 
@@ -165,10 +193,14 @@ impl Application for App {
     type Message = Message;
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
+        // let load_font = iced::font::load(FONT_BYTES).map(|_| Message::FontLoaded);
         (
             App {
                 play_log: play_log::PlayLog::new(),
                 state: AppState::Created,
+                is_riichi: false,
+                font_loaded: false,
+                input_value: String::new(),
             },
             Command::none(),
         )
