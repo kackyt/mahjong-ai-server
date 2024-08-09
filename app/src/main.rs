@@ -1,11 +1,13 @@
 use ai_bridge::interface::G_STATE;
 use iced::{
     executor,
-    widget::{button, column, container, image, row, text_input, Row, Space},
+    widget::{button, column, container, image, row, text, Row},
     Application, Command, Element,
 };
 use log::{debug, info};
-use mahjong_core::play_log;
+use mahjong_core::{mahjong_generated::open_mahjong::PaiT, play_log, shanten::PaiState};
+use modal::Modal;
+pub mod modal;
 
 struct App {
     play_log: play_log::PlayLog,
@@ -13,11 +15,14 @@ struct App {
     is_riichi: bool,
     font_loaded: bool,
     input_value: String,
+    turns: u32,
+    show_modal: bool,
 }
 
 enum AppState {
     Created,
     Started,
+    Ended,
 }
 
 #[derive(Debug, Clone)]
@@ -28,6 +33,7 @@ pub enum Message {
     Riichi,
     FontLoaded,
     InputChanged(String),
+    HideModal,
 }
 
 fn painum2path(painum: u32) -> String {
@@ -67,13 +73,22 @@ fn painum2path(painum: u32) -> String {
     format!("{}/images/haiga/ura.gif", env!("CARGO_MANIFEST_DIR"))
 }
 
+unsafe fn player_shanten(player_num: usize) -> i32 {
+    // シャンテン数を計算
+    let state = &G_STATE;
+    let mut tehai: Vec<PaiT> = state.players[player_num].tehai.iter().cloned().collect();
+    tehai.push(state.players[player_num].tsumohai.clone());
+
+    PaiState::from(&tehai).get_shanten(0)
+}
+
 impl App {
     unsafe fn kawahai<'a>(&self) -> Vec<Element<'a, Message>> {
         match self.state {
             AppState::Created => {
                 vec![]
             }
-            AppState::Started => {
+            AppState::Started | AppState::Ended => {
                 let state = &G_STATE;
                 let kawahai = &state.players[0].kawahai;
                 let kawahai_num = state.players[0].kawahai_len;
@@ -115,6 +130,21 @@ impl App {
 
                 ui_tehai
             }
+            AppState::Ended => {
+                let state = &G_STATE;
+                let tehai = &state.players[0].tehai;
+                let tehai_num = state.players[0].tehai_len;
+                debug!("tehai_num = {}", tehai_num);
+
+                let mut ui_tehai: Vec<Element<'a, Message>> = tehai[0..tehai_num as usize]
+                    .iter()
+                    .map(|pai| image(painum2path(pai.pai_num as u32)).into())
+                    .collect();
+
+                ui_tehai.push(image(painum2path(state.players[0].tsumohai.pai_num as u32)).into());
+
+                ui_tehai
+            }
         }
     }
 }
@@ -137,6 +167,7 @@ impl Application for App {
                 state.start(&mut self.play_log);
                 state.tsumo(&mut self.play_log);
                 self.state = AppState::Started;
+                self.turns = 0;
                 Command::none()
             },
             Message::Dahai(index) => unsafe {
@@ -149,7 +180,14 @@ impl Application for App {
                     debug!("Dahai {}", pai.pai_num);
                 }
                 state.sutehai(&mut self.play_log, index, false);
-                state.tsumo(&mut self.play_log);
+                self.turns += 1;
+
+                if self.turns > 18 {
+                    self.state = AppState::Ended;
+                    self.show_modal = true;
+                } else {
+                    state.tsumo(&mut self.play_log);
+                }
                 Command::none()
             },
             Message::Tsumo => Command::none(),
@@ -165,14 +203,19 @@ impl Application for App {
                 self.input_value = value;
                 Command::none()
             }
+            Message::HideModal => {
+                self.show_modal = false;
+                Command::none()
+            }
         }
     }
 
     fn view(&self) -> Element<Message> {
         unsafe {
+            let shanten = player_shanten(0);
             let content: Element<_> = column![
                 button("Start").on_press(Message::Start),
-                text_input("Type something", &self.input_value).on_input(Message::InputChanged),
+                text(format!("{} shanten", shanten)),
                 Row::from_vec(self.kawahai()),
                 Row::from_vec(self.tehai()),
             ]
@@ -186,14 +229,29 @@ impl Application for App {
             .padding(10)
             .into();
 
-            container(content).into()
+            let containered_content = container(content);
+
+            if self.show_modal {
+                let modal = container(
+                    column![
+                        text("Game Ended"),
+                        button("Close").on_press(Message::HideModal),
+                    ]
+                    .spacing(10)
+                    .padding(10),
+                );
+
+                Modal::new(containered_content, modal).into()
+            } else {
+                containered_content.into()
+            }
         }
     }
 
     type Message = Message;
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
-        // let load_font = iced::font::load(FONT_BYTES).map(|_| Message::FontLoaded);
+        let load_font = iced::font::load(FONT_BYTES).map(|_| Message::FontLoaded);
         (
             App {
                 play_log: play_log::PlayLog::new(),
@@ -201,8 +259,10 @@ impl Application for App {
                 is_riichi: false,
                 font_loaded: false,
                 input_value: String::new(),
+                turns: 0,
+                show_modal: false,
             },
-            Command::none(),
+            load_font,
         )
     }
 
