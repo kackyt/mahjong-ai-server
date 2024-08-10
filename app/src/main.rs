@@ -1,6 +1,6 @@
 use ai_bridge::interface::G_STATE;
 use iced::{
-    executor,
+    executor, theme,
     widget::{button, column, container, image, row, text, Row},
     Application, Command, Element,
 };
@@ -239,7 +239,8 @@ impl Application for App {
                     ]
                     .spacing(10)
                     .padding(10),
-                );
+                )
+                .style(theme::Container::Box);
 
                 Modal::new(containered_content, modal).into()
             } else {
