@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use ai_bridge::interface::G_STATE;
 use iced::{
     executor, theme,
@@ -5,7 +7,7 @@ use iced::{
     Application, Command, Element,
 };
 use log::{debug, info};
-use mahjong_core::{mahjong_generated::open_mahjong::PaiT, play_log, shanten::PaiState};
+use mahjong_core::{agari, mahjong_generated::open_mahjong::PaiT, play_log, shanten::PaiState};
 use modal::Modal;
 pub mod modal;
 
@@ -13,10 +15,9 @@ struct App {
     play_log: play_log::PlayLog,
     state: AppState,
     is_riichi: bool,
-    font_loaded: bool,
-    input_value: String,
     turns: u32,
-    show_modal: bool,
+    is_show_modal: bool,
+    modal_message: String,
 }
 
 enum AppState {
@@ -32,7 +33,7 @@ pub enum Message {
     Tsumo,
     Riichi,
     FontLoaded,
-    InputChanged(String),
+    ShowModal(String),
     HideModal,
 }
 
@@ -147,6 +148,11 @@ impl App {
             }
         }
     }
+
+    fn show_modal(&mut self, message: &str) {
+        self.is_show_modal = true;
+        self.modal_message = String::from(message);
+    }
 }
 
 const FONT_BYTES: &'static [u8] = include_bytes!("../fonts/Mamelon-5-Hi-Regular.otf");
@@ -184,27 +190,45 @@ impl Application for App {
 
                 if self.turns > 18 {
                     self.state = AppState::Ended;
-                    self.show_modal = true;
+                    self.show_modal("流局");
                 } else {
                     state.tsumo(&mut self.play_log);
                 }
                 Command::none()
             },
-            Message::Tsumo => Command::none(),
+            Message::Tsumo => {
+                unsafe {
+                    let state = &mut G_STATE;
+                    let result = state.tsumo_agari(&mut self.play_log);
+
+                    match result {
+                        Ok(agari) => {
+                            self.state = AppState::Ended;
+
+                            self.show_modal(&format!(
+                                "{:?}\n{}翻\n{}符\n{}点",
+                                agari.yaku, agari.han, agari.fu, agari.score
+                            ));
+                        }
+                        Err(m) => {
+                            self.show_modal(&format!("{:?}", m));
+                        }
+                    }
+                }
+                Command::none()
+            }
             Message::Riichi => {
                 self.is_riichi = !self.is_riichi;
                 Command::none()
             }
-            Message::FontLoaded => {
-                self.font_loaded = true;
-                Command::none()
-            }
-            Message::InputChanged(value) => {
-                self.input_value = value;
-                Command::none()
-            }
+            Message::FontLoaded => Command::none(),
             Message::HideModal => {
-                self.show_modal = false;
+                self.is_show_modal = false;
+                Command::none()
+            }
+            Message::ShowModal(mes) => {
+                self.is_show_modal = true;
+                self.modal_message = mes;
                 Command::none()
             }
         }
@@ -215,26 +239,25 @@ impl Application for App {
             let shanten = player_shanten(0);
             let content: Element<_> = column![
                 button("Start").on_press(Message::Start),
-                text(format!("{} shanten", shanten)),
+                text(format!("{} シャンテン", shanten)),
                 Row::from_vec(self.kawahai()),
                 Row::from_vec(self.tehai()),
-            ]
-            .push_maybe(self.font_loaded.then(|| {
                 row![
                     button("ツモ").on_press(Message::Tsumo),
                     button("リーチ").on_press(Message::Riichi)
                 ]
-            }))
+                .spacing(10)
+            ]
             .spacing(10)
             .padding(10)
             .into();
 
             let containered_content = container(content);
 
-            if self.show_modal {
+            if self.is_show_modal {
                 let modal = container(
                     column![
-                        text("Game Ended"),
+                        text(self.modal_message.clone()),
                         button("Close").on_press(Message::HideModal),
                     ]
                     .spacing(10)
@@ -258,10 +281,9 @@ impl Application for App {
                 play_log: play_log::PlayLog::new(),
                 state: AppState::Created,
                 is_riichi: false,
-                font_loaded: false,
-                input_value: String::new(),
                 turns: 0,
-                show_modal: false,
+                is_show_modal: false,
+                modal_message: String::new(),
             },
             load_font,
         )
@@ -277,5 +299,9 @@ impl Application for App {
 fn main() -> iced::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
-    App::run(iced::Settings::default())
+    App::run(iced::Settings {
+        antialiasing: true,
+        default_font: iced::Font::with_name("マメロン"),
+        ..iced::Settings::default()
+    })
 }
