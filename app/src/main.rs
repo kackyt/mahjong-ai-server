@@ -1,13 +1,11 @@
-use std::str::FromStr;
-
 use ai_bridge::interface::G_STATE;
 use iced::{
     executor, theme,
-    widget::{button, column, container, image, row, text, Row},
+    widget::{button, column, container, image, row, text, Checkbox, Row, Space},
     Application, Command, Element,
 };
 use log::{debug, info};
-use mahjong_core::{agari, mahjong_generated::open_mahjong::PaiT, play_log, shanten::PaiState};
+use mahjong_core::{mahjong_generated::open_mahjong::PaiT, play_log, shanten::PaiState};
 use modal::Modal;
 pub mod modal;
 
@@ -31,7 +29,7 @@ pub enum Message {
     Start,
     Dahai(usize),
     Tsumo,
-    Riichi,
+    ToggleRiichi(bool),
     FontLoaded,
     ShowModal(String),
     HideModal,
@@ -83,6 +81,12 @@ unsafe fn player_shanten(player_num: usize) -> i32 {
     PaiState::from(&tehai).get_shanten(0)
 }
 
+unsafe fn player_is_riichi(player_num: usize) -> bool {
+    let state = &G_STATE;
+
+    state.players[player_num].is_riichi
+}
+
 impl App {
     unsafe fn kawahai<'a>(&self) -> Vec<Element<'a, Message>> {
         match self.state {
@@ -122,6 +126,7 @@ impl App {
                             .into()
                     })
                     .collect();
+                ui_tehai.push(Space::new(10, 0).into());
 
                 ui_tehai.push(
                     button(image(painum2path(state.players[0].tsumohai.pai_num as u32)))
@@ -142,7 +147,11 @@ impl App {
                     .map(|pai| image(painum2path(pai.pai_num as u32)).into())
                     .collect();
 
-                ui_tehai.push(image(painum2path(state.players[0].tsumohai.pai_num as u32)).into());
+                if state.players[0].is_tsumo {
+                    ui_tehai.push(Space::new(10, 0).into());
+                    ui_tehai
+                        .push(image(painum2path(state.players[0].tsumohai.pai_num as u32)).into());
+                }
 
                 ui_tehai
             }
@@ -178,6 +187,7 @@ impl Application for App {
             },
             Message::Dahai(index) => unsafe {
                 let state = &mut G_STATE;
+                let state_riichi = player_is_riichi(0);
                 if index < state.players[0].tehai_len as usize {
                     let pai = &state.players[0].tehai[index];
                     debug!("Dahai {}", pai.pai_num);
@@ -185,14 +195,24 @@ impl Application for App {
                     let pai = &state.players[0].tsumohai;
                     debug!("Dahai {}", pai.pai_num);
                 }
-                state.sutehai(&mut self.play_log, index, false);
-                self.turns += 1;
+                let result =
+                    state.sutehai(&mut self.play_log, index, !state_riichi && self.is_riichi);
 
-                if self.turns > 18 {
-                    self.state = AppState::Ended;
-                    self.show_modal("流局");
-                } else {
-                    state.tsumo(&mut self.play_log);
+                match result {
+                    Ok(_) => {
+                        self.turns += 1;
+
+                        if self.turns > 18 {
+                            self.state = AppState::Ended;
+                            self.show_modal("流局");
+                        } else {
+                            state.tsumo(&mut self.play_log);
+                        }
+                    }
+                    Err(m) => {
+                        self.show_modal(&format!("{:?}", m));
+                        self.is_riichi = false;
+                    }
                 }
                 Command::none()
             },
@@ -217,8 +237,8 @@ impl Application for App {
                 }
                 Command::none()
             }
-            Message::Riichi => {
-                self.is_riichi = !self.is_riichi;
+            Message::ToggleRiichi(r) => {
+                self.is_riichi = r;
                 Command::none()
             }
             Message::FontLoaded => Command::none(),
@@ -236,6 +256,7 @@ impl Application for App {
 
     fn view(&self) -> Element<Message> {
         unsafe {
+            let isnt_riichi = !player_is_riichi(0);
             let shanten = player_shanten(0);
             let content: Element<_> = column![
                 button("Start").on_press(Message::Start),
@@ -244,7 +265,8 @@ impl Application for App {
                 Row::from_vec(self.tehai()),
                 row![
                     button("ツモ").on_press(Message::Tsumo),
-                    button("リーチ").on_press(Message::Riichi)
+                    Checkbox::new("リーチ", self.is_riichi)
+                        .on_toggle_maybe(isnt_riichi.then_some(Message::ToggleRiichi)),
                 ]
                 .spacing(10)
             ]
