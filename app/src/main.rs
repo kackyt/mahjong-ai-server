@@ -183,6 +183,7 @@ impl Application for App {
                 state.tsumo(&mut self.play_log);
                 self.state = AppState::Started;
                 self.turns = 0;
+                self.is_riichi = false;
                 Command::none()
             },
             Message::Dahai(index) => unsafe {
@@ -211,7 +212,7 @@ impl Application for App {
                     }
                     Err(m) => {
                         self.show_modal(&format!("{:?}", m));
-                        self.is_riichi = false;
+                        self.is_riichi = state_riichi;
                     }
                 }
                 Command::none()
