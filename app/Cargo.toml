@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-iced = { version = "0.12.1", default-features = false, features = ["image", "debug"] }
+iced = { version = "0.12.1", default-features = false, features = ["image", "debug", "tokio"] }
 iced_aw = { version = "0.8.0", default-features = false, features = ["tabs"] }
 
 env_logger = { version = "0.10", default-features = false, features = [
@@ -16,3 +16,4 @@ ai_bridge = { path = "../ai_bridge", features = ["load-dll"] }
 mahjong_core = { path = "../mahjong-app-engine/mahjong_core" }
 log = "0.4.22"
 libc = "0.2.157"
+anyhow = "1.0.86"

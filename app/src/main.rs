@@ -1,4 +1,4 @@
-use std::env;
+use std::{any, env};
 
 use ai_bridge::{
     ai_loader::{get_ai_symbol, load_ai},
@@ -8,6 +8,7 @@ use ai_bridge::{
     },
     interface::{mjsend_message, MJPInterfaceFuncP, G_STATE},
 };
+use anyhow::anyhow;
 use iced::{
     color, executor, theme,
     widget::{button, column, combo_box, container, image, row, text, Checkbox, Row, Space},
@@ -47,7 +48,7 @@ impl AI {
         use std::thread::sleep;
         use std::time::Duration;
 
-        sleep(Duration::from_millis(10));
+        sleep(Duration::from_millis(100));
 
         (self.symbol)(self.inst, MJPI_SUTEHAI.try_into().unwrap(), tsumohai_num, 0)
             .try_into()
@@ -482,28 +483,41 @@ impl Application for App {
                         );
                         Command::none()
                     } else {
-                        if flag == MJPIR_SUTEHAI {
-                            state.sutehai(&mut self.play_log, index as usize, false);
-                        } else if flag == MJPIR_REACH {
-                            state.sutehai(&mut self.play_log, index as usize, true);
-                        }
-                        self.turns += 1;
-                        if self.turns > 18 {
-                            self.state = AppState::Ended;
-                            self.show_modal("流局");
-                            Command::none()
-                        } else {
-                            state.tsumo(&mut self.play_log);
-                            let tsumohai_num: usize = state.players[state.teban as usize]
-                                .tsumohai
-                                .pai_num
-                                .try_into()
-                                .unwrap();
-                            let ai = AI {
-                                symbol: self.ai_symbol,
-                                inst: self.ai_inst,
-                            };
-                            Command::perform(ai.ai_next(tsumohai_num), |r| Message::AICommand(r))
+                        let result = match flag {
+                            MJPIR_SUTEHAI => {
+                                state.sutehai(&mut self.play_log, index as usize, false)
+                            }
+                            MJPIR_REACH => state.sutehai(&mut self.play_log, index as usize, true),
+                            _ => Err(anyhow!("unknown flag {}", flag)),
+                        };
+
+                        match result {
+                            Ok(_) => {
+                                self.turns += 1;
+                                if self.turns > 18 {
+                                    self.state = AppState::Ended;
+                                    self.show_modal("流局");
+                                    Command::none()
+                                } else {
+                                    state.tsumo(&mut self.play_log);
+                                    let tsumohai_num: usize = state.players[state.teban as usize]
+                                        .tsumohai
+                                        .pai_num
+                                        .try_into()
+                                        .unwrap();
+                                    let ai = AI {
+                                        symbol: self.ai_symbol,
+                                        inst: self.ai_inst,
+                                    };
+                                    Command::perform(ai.ai_next(tsumohai_num), |r| {
+                                        Message::AICommand(r)
+                                    })
+                                }
+                            }
+                            Err(m) => {
+                                self.show_modal(&format!("{:?}", m));
+                                Command::none()
+                            }
                         }
                     }
                 }
@@ -529,6 +543,7 @@ impl Application for App {
                     ),
                 ]
                 .spacing(10),
+                text(format!("turn {}", self.turns)),
                 text(format!("{} シャンテン", shanten)),
                 Row::from_vec(self.kawahai()),
                 Row::from_vec(self.tehai()),

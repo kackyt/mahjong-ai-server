@@ -232,9 +232,9 @@ unsafe fn mjsend_message_impl(
                 if i >= 27 {
                     pstate.hai_count_z[i - 27] += 1;
                 } else if i >= 18 {
-                    pstate.hai_count_p[i - 18] += 1;
+                    pstate.hai_count_s[i - 18] += 1;
                 } else if i >= 9 {
-                    pstate.hai_count_s[i - 9] += 1;
+                    pstate.hai_count_p[i - 9] += 1;
                 } else {
                     pstate.hai_count_m[i] += 1;
                 }
@@ -242,9 +242,9 @@ unsafe fn mjsend_message_impl(
                 if i >= 27 {
                     pstate.hai_count_z[i - 27] -= 1;
                 } else if i >= 18 {
-                    pstate.hai_count_p[i - 18] -= 1;
+                    pstate.hai_count_s[i - 18] -= 1;
                 } else if i >= 9 {
-                    pstate.hai_count_s[i - 9] -= 1;
+                    pstate.hai_count_p[i - 9] -= 1;
                 } else {
                     pstate.hai_count_m[i] -= 1;
                 }
