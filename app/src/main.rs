@@ -1,8 +1,8 @@
 use ai_bridge::interface::G_STATE;
 use iced::{
-    executor, theme,
+    color, executor, theme,
     widget::{button, column, container, image, row, text, Checkbox, Row, Space},
-    Application, Command, Element,
+    Application, Background, Border, Command, Element,
 };
 use log::{debug, info};
 use mahjong_core::{mahjong_generated::open_mahjong::PaiT, play_log, shanten::PaiState};
@@ -135,7 +135,19 @@ impl App {
 
                 kawahai[0..kawahai_num as usize]
                     .iter()
-                    .map(|pai| container(image(painum2path(pai.pai_num as u32))).into())
+                    .map(|pai| {
+                        if pai.is_riichi {
+                            container(image(painum2path(pai.pai_num as u32)))
+                                .style(move |_: &_| container::Appearance {
+                                    background: Some(Background::Color(color!(0, 0, 255))),
+                                    ..Default::default()
+                                })
+                                .padding([0, 0, 4, 0])
+                                .into()
+                        } else {
+                            container(image(painum2path(pai.pai_num as u32))).into()
+                        }
+                    })
                     .collect()
             }
         }
@@ -158,6 +170,7 @@ impl App {
                     .map(|(index, pai)| {
                         button(image(painum2path(pai.pai_num as u32)))
                             .on_press(Message::Dahai(index))
+                            .padding(0)
                             .into()
                     })
                     .collect();
@@ -166,6 +179,7 @@ impl App {
                 ui_tehai.push(
                     button(image(painum2path(state.players[0].tsumohai.pai_num as u32)))
                         .on_press(Message::Dahai(13))
+                        .padding(0)
                         .into(),
                 );
 
