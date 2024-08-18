@@ -28,6 +28,7 @@ extern crate libc;
 // スレッドセーフではない
 pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(Default::default);
 pub static mut G_STRUCTURE_TYPE: Lazy<HashMap<*mut c_void, usize>> = Lazy::new(HashMap::new);
+pub type MJPInterfaceFuncP = extern "stdcall" fn(*mut c_void, usize, usize, usize) -> usize;
 
 fn get_rule(state: &GameStateT, idx: u32) -> u32 {
     match idx {

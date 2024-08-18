@@ -1,13 +1,24 @@
-use ai_bridge::interface::G_STATE;
+use std::env;
+
+use ai_bridge::{
+    ai_loader::{get_ai_symbol, load_ai},
+    bindings::{
+        MJEK_RYUKYOKU, MJPIR_REACH, MJPIR_SUTEHAI, MJPIR_TSUMO, MJPI_BASHOGIME,
+        MJPI_CREATEINSTANCE, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_STARTGAME, MJPI_SUTEHAI,
+    },
+    interface::{mjsend_message, MJPInterfaceFuncP, G_STATE},
+};
 use iced::{
     color, executor, theme,
-    widget::{button, column, container, image, row, text, Checkbox, Row, Space},
+    widget::{button, column, combo_box, container, image, row, text, Checkbox, Row, Space},
     Application, Background, Command, Element,
 };
 use log::{debug, info};
 use mahjong_core::{mahjong_generated::open_mahjong::PaiT, play_log, shanten::PaiState};
 use modal::Modal;
 pub mod modal;
+
+extern crate libc;
 
 struct App {
     play_log: play_log::PlayLog,
@@ -16,6 +27,32 @@ struct App {
     turns: u32,
     is_show_modal: bool,
     modal_message: String,
+    ai_path: Option<String>,
+    ai_files: combo_box::State<String>,
+    ai_symbol: MJPInterfaceFuncP,
+    ai_inst: *mut std::ffi::c_void,
+}
+
+#[derive(Clone)]
+struct AI {
+    symbol: MJPInterfaceFuncP,
+    inst: *mut std::ffi::c_void,
+}
+
+unsafe impl Send for AI {}
+unsafe impl Sync for AI {}
+
+impl AI {
+    async fn ai_next(self, tsumohai_num: usize) -> u32 {
+        use std::thread::sleep;
+        use std::time::Duration;
+
+        sleep(Duration::from_millis(10));
+
+        (self.symbol)(self.inst, MJPI_SUTEHAI.try_into().unwrap(), tsumohai_num, 0)
+            .try_into()
+            .unwrap()
+    }
 }
 
 enum AppState {
@@ -33,6 +70,41 @@ pub enum Message {
     FontLoaded,
     ShowModal(String),
     HideModal,
+    SelectAI(String),
+    AICommand(u32),
+}
+
+extern "stdcall" fn dummy_func(
+    _inst: *mut std::ffi::c_void,
+    _message: usize,
+    _param1: usize,
+    _param2: usize,
+) -> usize {
+    0
+}
+
+fn find_dll_files() -> Vec<String> {
+    let mut files = vec![];
+    if let Ok(entries) = std::fs::read_dir(env::current_dir().unwrap()) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() {
+                        if let Some(ext) = entry.path().extension() {
+                            if ext == "dll" {
+                                if let Some(file_name) = entry.path().file_stem() {
+                                    if let Some(file_name) = file_name.to_str() {
+                                        files.push(file_name.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    files
 }
 
 fn painum2path(painum: u32) -> String {
@@ -231,16 +303,74 @@ impl Application for App {
         match event {
             Message::Start => unsafe {
                 let state = &mut G_STATE;
+                let sendmes_ptr = mjsend_message as *const ();
+                let dummy: [i32; 4] = [4, 5, 6, 7];
 
                 info!("Start");
+
+                // AIファイルをロードする
+                if let Some(ai_path) = &self.ai_path {
+                    let mut cur = env::current_dir().unwrap();
+                    cur.push(format!("{}.dll", ai_path));
+                    let res = load_ai(&cur);
+                    if let Ok(handle) = res {
+                        let symbol = get_ai_symbol(handle, "MJPInterfaceFunc");
+
+                        if let Ok(s) = symbol {
+                            self.ai_symbol = std::mem::transmute(s);
+                            // メモリの確保
+                            let size = (self.ai_symbol)(
+                                std::ptr::null_mut(),
+                                MJPI_CREATEINSTANCE.try_into().unwrap(),
+                                0,
+                                0,
+                            );
+
+                            let inst = libc::malloc(size as usize);
+
+                            libc::memset(inst, 0, size as usize);
+
+                            (self.ai_symbol)(
+                                inst,
+                                MJPI_INITIALIZE.try_into().unwrap(),
+                                0,
+                                std::mem::transmute(sendmes_ptr),
+                            );
+                            (self.ai_symbol)(inst, MJPI_STARTGAME.try_into().unwrap(), 0, 0);
+                            (self.ai_symbol)(
+                                inst,
+                                MJPI_BASHOGIME.try_into().unwrap(),
+                                std::mem::transmute(dummy.as_ptr()),
+                                0,
+                            );
+
+                            self.ai_inst = inst;
+                        }
+                    }
+                }
                 state.create(b"test", 1, &mut self.play_log);
                 state.shuffle();
                 state.start(&mut self.play_log);
                 state.tsumo(&mut self.play_log);
+                let tsumohai_num: usize = state.players[state.teban as usize]
+                    .tsumohai
+                    .pai_num
+                    .try_into()
+                    .unwrap();
+
                 self.state = AppState::Started;
                 self.turns = 0;
                 self.is_riichi = false;
-                Command::none()
+
+                if self.ai_inst.is_null() {
+                    Command::none()
+                } else {
+                    let ai = AI {
+                        symbol: self.ai_symbol,
+                        inst: self.ai_inst,
+                    };
+                    Command::perform(ai.ai_next(tsumohai_num), |r| Message::AICommand(r))
+                }
             },
             Message::Dahai(index) => unsafe {
                 let state = &mut G_STATE;
@@ -311,6 +441,73 @@ impl Application for App {
                 self.modal_message = mes;
                 Command::none()
             }
+            Message::SelectAI(ai_path) => {
+                self.ai_path = Some(ai_path);
+                Command::none()
+            }
+            Message::AICommand(ret) => unsafe {
+                let index = ret & 0x3F;
+                let flag = ret & 0xFF80;
+
+                {
+                    let state = &mut G_STATE;
+
+                    if flag == MJPIR_TSUMO {
+                        let score: [i32; 4] = [0, 0, 0, 0];
+                        info!("agari!!!");
+                        let agari_r = state.tsumo_agari(&mut self.play_log);
+
+                        match agari_r {
+                            Ok(agari) => {
+                                self.state = AppState::Ended;
+
+                                self.show_modal(&format!(
+                                    "{}\n{}翻\n{}符\n{}点",
+                                    yaku_to_string(&agari.yaku),
+                                    agari.han,
+                                    agari.fu,
+                                    agari.score
+                                ));
+                            }
+                            Err(m) => {
+                                self.show_modal(&format!("{:?}", m));
+                            }
+                        }
+
+                        (self.ai_symbol)(
+                            self.ai_inst,
+                            MJPI_ENDKYOKU.try_into().unwrap(),
+                            MJEK_RYUKYOKU.try_into().unwrap(),
+                            std::mem::transmute(score.as_ptr()),
+                        );
+                        Command::none()
+                    } else {
+                        if flag == MJPIR_SUTEHAI {
+                            state.sutehai(&mut self.play_log, index as usize, false);
+                        } else if flag == MJPIR_REACH {
+                            state.sutehai(&mut self.play_log, index as usize, true);
+                        }
+                        self.turns += 1;
+                        if self.turns > 18 {
+                            self.state = AppState::Ended;
+                            self.show_modal("流局");
+                            Command::none()
+                        } else {
+                            state.tsumo(&mut self.play_log);
+                            let tsumohai_num: usize = state.players[state.teban as usize]
+                                .tsumohai
+                                .pai_num
+                                .try_into()
+                                .unwrap();
+                            let ai = AI {
+                                symbol: self.ai_symbol,
+                                inst: self.ai_inst,
+                            };
+                            Command::perform(ai.ai_next(tsumohai_num), |r| Message::AICommand(r))
+                        }
+                    }
+                }
+            },
         }
     }
 
@@ -322,6 +519,16 @@ impl Application for App {
                 button("Start").on_press(Message::Start),
                 text("ドラ"),
                 Row::from_vec(self.dora()),
+                row![
+                    text("AI"),
+                    combo_box(
+                        &self.ai_files,
+                        "AIファイル(.dll)",
+                        self.ai_path.as_ref(),
+                        Message::SelectAI
+                    ),
+                ]
+                .spacing(10),
                 text(format!("{} シャンテン", shanten)),
                 Row::from_vec(self.kawahai()),
                 Row::from_vec(self.tehai()),
@@ -368,6 +575,10 @@ impl Application for App {
                 turns: 0,
                 is_show_modal: false,
                 modal_message: String::new(),
+                ai_files: combo_box::State::new(find_dll_files()),
+                ai_path: None,
+                ai_symbol: dummy_func,
+                ai_inst: std::ptr::null_mut(),
             },
             load_font,
         )

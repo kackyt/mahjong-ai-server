@@ -199,6 +199,7 @@ dependencies = [
  "env_logger",
  "iced",
  "iced_aw",
+ "libc",
  "log",
  "mahjong_core",
 ]
@@ -2106,9 +2107,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.152"
+version = "0.2.157"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13e3bf6590cbc649f4d1a3eefc9d5d6eb746f5200ffb04e5e142700b8faa56e7"
+checksum = "374af5f94e54fa97cf75e945cce8a6b201e88a1a07e688b47dfd2a59c66dbd86"
 
 [[package]]
 name = "libloading"

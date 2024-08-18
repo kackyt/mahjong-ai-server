@@ -12,6 +12,7 @@ env_logger = { version = "0.10", default-features = false, features = [
     "humantime",
 ] }
 
-ai_bridge = { path = "../ai_bridge" }
+ai_bridge = { path = "../ai_bridge", features = ["load-dll"] }
 mahjong_core = { path = "../mahjong-app-engine/mahjong_core" }
 log = "0.4.22"
+libc = "0.2.157"
