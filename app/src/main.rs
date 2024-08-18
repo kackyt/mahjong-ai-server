@@ -2,7 +2,7 @@ use ai_bridge::interface::G_STATE;
 use iced::{
     color, executor, theme,
     widget::{button, column, container, image, row, text, Checkbox, Row, Space},
-    Application, Background, Border, Command, Element,
+    Application, Background, Command, Element,
 };
 use log::{debug, info};
 use mahjong_core::{mahjong_generated::open_mahjong::PaiT, play_log, shanten::PaiState};
