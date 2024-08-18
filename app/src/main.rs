@@ -88,6 +88,41 @@ unsafe fn player_is_riichi(player_num: usize) -> bool {
 }
 
 impl App {
+    unsafe fn dora<'a>(&self) -> Vec<Element<'a, Message>> {
+        match self.state {
+            AppState::Created => {
+                vec![]
+            }
+            AppState::Started => {
+                let state = &G_STATE;
+                let dora = state.get_dora();
+
+                dora.iter()
+                    .map(|pai| container(image(painum2path(pai.pai_num as u32))).into())
+                    .collect()
+            }
+            AppState::Ended => {
+                let state = &G_STATE;
+                let dora = state.get_dora();
+                let uradora = state.get_uradora();
+
+                let mut arr = dora
+                    .iter()
+                    .map(|pai| container(image(painum2path(pai.pai_num as u32))).into())
+                    .collect::<Vec<Element<'a, Message>>>();
+
+                arr.push(Space::new(10, 0).into());
+
+                arr.extend(
+                    uradora
+                        .iter()
+                        .map(|pai| container(image(painum2path(pai.pai_num as u32))).into()),
+                );
+
+                arr
+            }
+        }
+    }
     unsafe fn kawahai<'a>(&self) -> Vec<Element<'a, Message>> {
         match self.state {
             AppState::Created => {
@@ -261,6 +296,8 @@ impl Application for App {
             let shanten = player_shanten(0);
             let content: Element<_> = column![
                 button("Start").on_press(Message::Start),
+                text("ドラ"),
+                Row::from_vec(self.dora()),
                 text(format!("{} シャンテン", shanten)),
                 Row::from_vec(self.kawahai()),
                 Row::from_vec(self.tehai()),
