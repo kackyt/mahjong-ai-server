@@ -87,6 +87,13 @@ unsafe fn player_is_riichi(player_num: usize) -> bool {
     state.players[player_num].is_riichi
 }
 
+fn yaku_to_string(arr: &Vec<(String, i32)>) -> String {
+    arr.iter()
+        .map(|(yaku, han)| format!("{} {}翻", yaku, han))
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
 impl App {
     unsafe fn dora<'a>(&self) -> Vec<Element<'a, Message>> {
         match self.state {
@@ -276,8 +283,11 @@ impl Application for App {
                             self.state = AppState::Ended;
 
                             self.show_modal(&format!(
-                                "{:?}\n{}翻\n{}符\n{}点",
-                                agari.yaku, agari.han, agari.fu, agari.score
+                                "{}\n{}翻\n{}符\n{}点",
+                                yaku_to_string(&agari.yaku),
+                                agari.han,
+                                agari.fu,
+                                agari.score
                             ));
                         }
                         Err(m) => {
