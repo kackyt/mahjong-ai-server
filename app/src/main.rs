@@ -15,7 +15,10 @@ use iced::{
     Application, Background, Command, Element,
 };
 use log::{debug, info};
-use mahjong_core::{mahjong_generated::open_mahjong::PaiT, play_log, shanten::PaiState};
+use mahjong_core::{
+    game_process::GameProcessError, mahjong_generated::open_mahjong::PaiT, play_log,
+    shanten::PaiState,
+};
 use modal::Modal;
 pub mod modal;
 
@@ -515,7 +518,12 @@ impl Application for App {
                                 }
                             }
                             Err(m) => {
-                                self.show_modal(&format!("{:?}", m));
+                                match m {
+                                    GameProcessError::IllegalSutehaiAfterRiichi => {}
+                                    GameProcessError::Other(e) => {
+                                        self.show_modal(&format!("{:?}", e));
+                                    }
+                                }
                                 Command::none()
                             }
                         }
