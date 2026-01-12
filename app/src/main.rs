@@ -29,6 +29,9 @@ pub mod components;
 pub mod pages;
 pub mod types;
 pub mod utils;
+mod images; // Added module
+
+use images::ImageCache;
 
 use types::{ActionState, AppState, Message, Settings};
 use pages::{game_page, settings_page, result_page};
@@ -58,6 +61,7 @@ struct App {
     agents: Vec<Box<dyn Agent>>,
 
     action_state: ActionState,
+    image_cache: ImageCache,
 }
 
 fn find_dll_files() -> Vec<String> {
@@ -273,7 +277,10 @@ impl Application for App {
                      let _ = state.tsumo_agari(&mut self.play_log);
                      self.state = AppState::Ended;
                 } else if flag == MJPIR_SUTEHAI {
-                     let _ = state.sutehai(&mut self.play_log, index as usize, false);
+                     if let Err(e) = state.sutehai(&mut self.play_log, index as usize, false) {
+                         self.show_modal(&format!("{:?}", e));
+                         return Command::none();
+                     }
 
                      // Check Human Actions on AI Discard
                      let discarder_idx = teban;
@@ -376,7 +383,7 @@ impl Application for App {
                 settings_page::view(&self.settings, &self.ai_files)
             },
             AppState::Started => {
-                let game = game_page::view(self.state, self.turns, self.is_riichi);
+                let game = game_page::view(self.state, self.turns, self.is_riichi, &self.image_cache);
 
                 if self.action_state.has_any() {
                     let mut buttons = row![];
@@ -450,6 +457,7 @@ impl Application for App {
                 settings: Settings::default(),
                 agents: Vec::new(),
                 action_state: ActionState::default(),
+                image_cache: ImageCache::new(),
             },
             load_font,
         )

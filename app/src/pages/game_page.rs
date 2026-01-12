@@ -6,12 +6,13 @@ use iced::{
 };
 
 use crate::{
-    components::{dora, kawahai, tehai},
+    components::{dora, kawahai, tehai, fulo},
     types::{AppState, Message},
     utils::painum2path,
+    images::ImageCache,
 };
 
-pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool) -> Element<'a, Message> {
+pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool, image_cache: &ImageCache) -> Element<'a, Message> {
     unsafe {
         let core_state = &G_STATE;
         
@@ -30,10 +31,10 @@ pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool) -> Element<'a, Mes
             state == AppState::Ended,
         );
 
-        let kawahai_0 = kawahai::view(&core_state.players[0].kawahai, core_state.players[0].kawahai_len as usize);
-        let kawahai_1 = kawahai::view(&core_state.players[1].kawahai, core_state.players[1].kawahai_len as usize);
-        let kawahai_2 = kawahai::view(&core_state.players[2].kawahai, core_state.players[2].kawahai_len as usize);
-        let kawahai_3 = kawahai::view(&core_state.players[3].kawahai, core_state.players[3].kawahai_len as usize);
+        let kawahai_0 = kawahai::view(&core_state.players[0].kawahai, core_state.players[0].kawahai_len as usize, 0, image_cache);
+        let kawahai_1 = kawahai::view(&core_state.players[1].kawahai, core_state.players[1].kawahai_len as usize, 270, image_cache);
+        let kawahai_2 = kawahai::view(&core_state.players[2].kawahai, core_state.players[2].kawahai_len as usize, 180, image_cache);
+        let kawahai_3 = kawahai::view(&core_state.players[3].kawahai, core_state.players[3].kawahai_len as usize, 90, image_cache);
 
         let tehai_elem = tehai::view(
             &core_state.players[0].tehai,
@@ -42,6 +43,14 @@ pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool) -> Element<'a, Mes
             core_state.players[0].is_tsumo,
             state == AppState::Started,
         );
+        
+        // P0 Fulo
+        let fulo_0 = fulo::view(&core_state.players[0].mentsu[0..core_state.players[0].mentsu_len as usize], image_cache);
+        // Opponent Fulos could be added here similar to P0, positioned near their kawahai.
+        // For brevity and layout simplicity I'll stick to P0 Fulo as explicit request was "Called melds separate from hand".
+        // But requested rotation for AI Kawahai implies visual polish.
+        // I will add Fulo placeholders for opponents? Layout gets tricky without absolute positioning.
+        // Ignoring opponent fulo for now to avoid breaking layout, focusing on P0 Fulo and AI Kawahai rotation.
 
         let center_area = column![
             text("ドラ").style(Color::WHITE),
@@ -69,7 +78,7 @@ pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool) -> Element<'a, Mes
                 column![
                     text("Player 0 (You)").size(20).style(Color::WHITE),
                     kawahai_0,
-                    tehai_elem,
+                    row![tehai_elem, fulo_0].spacing(20), // Hand + Fulo
                     row![
                         button("ツモ").on_press(Message::Tsumo),
                         row![

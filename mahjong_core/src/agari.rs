@@ -566,6 +566,12 @@ impl AgariBehavior for GameStateT {
                 let agari = self.get_agari(who, m, fulo, is_ron);
                 let mut yakus = self.get_condition_yaku(who, &agari);
                 yakus.extend(agari.get_yaku_list());
+                
+                // Enforce at least one Yaku requirement (excluding Dora)
+                if yakus.is_empty() {
+                    return Agari::default();
+                }
+
                 yakus.extend(self.get_dora_yaku(who, m, fulo, nukidora));
                 agari.get_agari(&yakus)
             })

@@ -504,6 +504,13 @@ impl GameStateT {
         let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
         tehai.push(pai.clone());
 
+        // Genbutsu Furiten Check
+        for k in 0..player.kawahai_len as usize {
+            if player.kawahai[k].pai_num == pai.pai_num {
+                return None;
+            }
+        }
+
         let mut state = PaiState::from(&tehai);
         let fulo: Vec<crate::mahjong_generated::open_mahjong::Mentsu> = player.mentsu
             [0..player.mentsu_len as usize]
@@ -566,7 +573,7 @@ impl GameStateT {
     }
 
     pub fn operate_fulo(&mut self, play_log: &mut PlayLog, player_idx: usize, mentsu: MentsuT) -> anyhow::Result<()> {
-        let discarder_idx = self.teban as usize;
+        let discarder_idx = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
         let discarder = &mut self.players[discarder_idx];
         if discarder.kawahai_len > 0 {
             discarder.kawahai[discarder.kawahai_len as usize - 1].is_nakare = true;
@@ -707,7 +714,8 @@ impl GameStateT {
 
     pub fn check_chii(&self, player_idx: usize, pai: &PaiT) -> Vec<MentsuT> {
         let mut res = Vec::new();
-        if player_idx != (self.teban as usize + 1) % self.player_len as usize {
+        // Since teban has advanced, we check if player is teban (meaning they are next, so discard was from kamicha)
+        if player_idx != self.teban as usize {
             return res;
         }
         if pai.pai_num >= 27 {
@@ -757,7 +765,10 @@ impl GameStateT {
 
     pub fn check_pon(&self, player_idx: usize, pai: &PaiT) -> Vec<MentsuT> {
         let mut res = Vec::new();
-        if player_idx == self.teban as usize {
+        // Updated logic: Teban has advanced, so player CAN be teban (actually must be for Pon usually? No, Pon can be anyone usually except discarder)
+        // Discarder = teban-1. Player != Discarder.
+        let discarder = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
+        if player_idx == discarder {
             return res;
         }
 
@@ -793,7 +804,8 @@ impl GameStateT {
 
     pub fn check_minkan(&self, player_idx: usize, pai: &PaiT) -> Vec<MentsuT> {
         let mut res = Vec::new();
-        if player_idx == self.teban as usize {
+        let discarder = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
+        if player_idx == discarder {
             return res;
         }
 
@@ -943,7 +955,7 @@ impl GameStateT {
                 }
             }
             ActionType::ACTION_CHII => {
-                let discarder = self.teban as usize;
+                let discarder = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
                 if self.players[discarder].kawahai_len == 0 {
                     bail!("No discard to Chii");
                 }
@@ -957,7 +969,7 @@ impl GameStateT {
                 Ok(())
             }
             ActionType::ACTION_PON => {
-                let discarder = self.teban as usize;
+                let discarder = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
                 if self.players[discarder].kawahai_len == 0 {
                     bail!("No discard to Pon");
                 }
@@ -984,7 +996,7 @@ impl GameStateT {
                     }
                 } else {
                     // Minkan
-                    let discarder = self.teban as usize;
+                    let discarder = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
                     if self.players[discarder].kawahai_len == 0 {
                         bail!("No discard to Kan");
                     }
