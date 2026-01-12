@@ -28,6 +28,7 @@ extern crate libc;
 // スレッドセーフではない
 pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(Default::default);
 pub static mut G_STRUCTURE_TYPE: Lazy<HashMap<*mut c_void, usize>> = Lazy::new(HashMap::new);
+pub type MJPInterfaceFuncP = extern "stdcall" fn(*mut c_void, usize, usize, usize) -> usize;
 
 fn get_rule(state: &GameStateT, idx: u32) -> u32 {
     match idx {
@@ -231,9 +232,9 @@ unsafe fn mjsend_message_impl(
                 if i >= 27 {
                     pstate.hai_count_z[i - 27] += 1;
                 } else if i >= 18 {
-                    pstate.hai_count_p[i - 18] += 1;
+                    pstate.hai_count_s[i - 18] += 1;
                 } else if i >= 9 {
-                    pstate.hai_count_s[i - 9] += 1;
+                    pstate.hai_count_p[i - 9] += 1;
                 } else {
                     pstate.hai_count_m[i] += 1;
                 }
@@ -241,9 +242,9 @@ unsafe fn mjsend_message_impl(
                 if i >= 27 {
                     pstate.hai_count_z[i - 27] -= 1;
                 } else if i >= 18 {
-                    pstate.hai_count_p[i - 18] -= 1;
+                    pstate.hai_count_s[i - 18] -= 1;
                 } else if i >= 9 {
-                    pstate.hai_count_s[i - 9] -= 1;
+                    pstate.hai_count_p[i - 9] -= 1;
                 } else {
                     pstate.hai_count_m[i] -= 1;
                 }
