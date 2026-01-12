@@ -10,17 +10,25 @@ use ai_bridge::{
 };
 use anyhow::anyhow;
 use iced::{
-    color, executor, theme,
-    widget::{button, column, combo_box, container, image, row, text, Checkbox, Row, Space},
-    Application, Background, Command, Element,
+    executor, theme,
+    widget::{combo_box, container, text, column, button}, // Added column/text/button for modal fallback if needed
+    Application, Command, Element,
 };
 use log::{debug, info};
 use mahjong_core::{
-    game_process::GameProcessError, mahjong_generated::open_mahjong::PaiT, play_log,
-    shanten::PaiState,
+    game_process::GameProcessError, play_log,
 };
+
 use modal::Modal;
 pub mod modal;
+
+pub mod components;
+pub mod pages;
+pub mod types;
+pub mod utils;
+
+use types::{AppState, Message};
+use pages::{game_page, title_page};
 
 extern crate libc;
 
@@ -59,25 +67,6 @@ impl AI {
     }
 }
 
-enum AppState {
-    Created,
-    Started,
-    Ended,
-}
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    Start,
-    Dahai(usize),
-    Tsumo,
-    ToggleRiichi(bool),
-    FontLoaded,
-    ShowModal(String),
-    HideModal,
-    SelectAI(String),
-    AICommand(u32),
-}
-
 extern "stdcall" fn dummy_func(
     _inst: *mut std::ffi::c_void,
     _message: usize,
@@ -111,58 +100,6 @@ fn find_dll_files() -> Vec<String> {
     files
 }
 
-fn painum2path(painum: u32) -> String {
-    if painum < 9 {
-        return format!(
-            "{}/images/haiga/man{}.gif",
-            env!("CARGO_MANIFEST_DIR"),
-            painum + 1
-        );
-    }
-
-    if painum < 18 {
-        return format!(
-            "{}/images/haiga/pin{}.gif",
-            env!("CARGO_MANIFEST_DIR"),
-            painum - 8
-        );
-    }
-
-    if painum < 27 {
-        return format!(
-            "{}/images/haiga/sou{}.gif",
-            env!("CARGO_MANIFEST_DIR"),
-            painum - 17
-        );
-    }
-
-    if painum < 34 {
-        let zihai = ["ton", "nan", "sha", "pei", "haku", "hatu", "tyun"];
-        return format!(
-            "{}/images/haiga/{}.gif",
-            env!("CARGO_MANIFEST_DIR"),
-            zihai[(painum - 27) as usize]
-        );
-    }
-
-    format!("{}/images/haiga/ura.gif", env!("CARGO_MANIFEST_DIR"))
-}
-
-unsafe fn player_shanten(player_num: usize) -> i32 {
-    // シャンテン数を計算
-    let state = &G_STATE;
-    let mut tehai: Vec<PaiT> = state.players[player_num].tehai.iter().cloned().collect();
-    tehai.push(state.players[player_num].tsumohai.clone());
-
-    PaiState::from(&tehai).get_shanten(0)
-}
-
-unsafe fn player_is_riichi(player_num: usize) -> bool {
-    let state = &G_STATE;
-
-    state.players[player_num].is_riichi
-}
-
 fn yaku_to_string(arr: &Vec<(String, i32)>) -> String {
     arr.iter()
         .map(|(yaku, han)| format!("{} {}翻", yaku, han))
@@ -170,126 +107,12 @@ fn yaku_to_string(arr: &Vec<(String, i32)>) -> String {
         .join("\n")
 }
 
+unsafe fn player_is_riichi(player_num: usize) -> bool {
+    let state = &G_STATE;
+    state.players[player_num].is_riichi
+}
+
 impl App {
-    unsafe fn dora<'a>(&self) -> Vec<Element<'a, Message>> {
-        match self.state {
-            AppState::Created => {
-                vec![]
-            }
-            AppState::Started => {
-                let state = &G_STATE;
-                let dora = state.get_dora();
-
-                dora.iter()
-                    .map(|pai| container(image(painum2path(pai.pai_num as u32))).into())
-                    .collect()
-            }
-            AppState::Ended => {
-                let state = &G_STATE;
-                let dora = state.get_dora();
-                let uradora = state.get_uradora();
-
-                let mut arr = dora
-                    .iter()
-                    .map(|pai| container(image(painum2path(pai.pai_num as u32))).into())
-                    .collect::<Vec<Element<'a, Message>>>();
-
-                arr.push(Space::new(10, 0).into());
-
-                arr.extend(
-                    uradora
-                        .iter()
-                        .map(|pai| container(image(painum2path(pai.pai_num as u32))).into()),
-                );
-
-                arr
-            }
-        }
-    }
-    unsafe fn kawahai<'a>(&self) -> Vec<Element<'a, Message>> {
-        match self.state {
-            AppState::Created => {
-                vec![]
-            }
-            AppState::Started | AppState::Ended => {
-                let state = &G_STATE;
-                let kawahai = &state.players[0].kawahai;
-                let kawahai_num = state.players[0].kawahai_len;
-
-                kawahai[0..kawahai_num as usize]
-                    .iter()
-                    .map(|pai| {
-                        if pai.is_riichi {
-                            container(image(painum2path(pai.pai_num as u32)))
-                                .style(move |_: &_| container::Appearance {
-                                    background: Some(Background::Color(color!(0, 0, 255))),
-                                    ..Default::default()
-                                })
-                                .padding([0, 0, 4, 0])
-                                .into()
-                        } else {
-                            container(image(painum2path(pai.pai_num as u32))).into()
-                        }
-                    })
-                    .collect()
-            }
-        }
-    }
-
-    unsafe fn tehai<'a>(&self) -> Vec<Element<'a, Message>> {
-        match self.state {
-            AppState::Created => {
-                vec![]
-            }
-            AppState::Started => {
-                let state = &G_STATE;
-                let tehai = &state.players[0].tehai;
-                let tehai_num = state.players[0].tehai_len;
-                debug!("tehai_num = {}", tehai_num);
-
-                let mut ui_tehai: Vec<Element<'a, Message>> = tehai[0..tehai_num as usize]
-                    .iter()
-                    .enumerate()
-                    .map(|(index, pai)| {
-                        button(image(painum2path(pai.pai_num as u32)))
-                            .on_press(Message::Dahai(index))
-                            .padding(0)
-                            .into()
-                    })
-                    .collect();
-                ui_tehai.push(Space::new(10, 0).into());
-
-                ui_tehai.push(
-                    button(image(painum2path(state.players[0].tsumohai.pai_num as u32)))
-                        .on_press(Message::Dahai(13))
-                        .padding(0)
-                        .into(),
-                );
-
-                ui_tehai
-            }
-            AppState::Ended => {
-                let state = &G_STATE;
-                let tehai = &state.players[0].tehai;
-                let tehai_num = state.players[0].tehai_len;
-                debug!("tehai_num = {}", tehai_num);
-
-                let mut ui_tehai: Vec<Element<'a, Message>> = tehai[0..tehai_num as usize]
-                    .iter()
-                    .map(|pai| image(painum2path(pai.pai_num as u32)).into())
-                    .collect();
-
-                if state.players[0].is_tsumo {
-                    ui_tehai.push(Space::new(10, 0).into());
-                    ui_tehai
-                        .push(image(painum2path(state.players[0].tsumohai.pai_num as u32)).into());
-                }
-
-                ui_tehai
-            }
-        }
-    }
-
     fn show_modal(&mut self, message: &str) {
         self.is_show_modal = true;
         self.modal_message = String::from(message);
@@ -518,11 +341,15 @@ impl Application for App {
                                 }
                             }
                             Err(m) => {
-                                match m {
-                                    GameProcessError::IllegalSutehaiAfterRiichi => {}
-                                    GameProcessError::Other(e) => {
-                                        self.show_modal(&format!("{:?}", e));
+                                if let Some(gp_err) = m.downcast_ref::<GameProcessError>() {
+                                    match gp_err {
+                                        GameProcessError::IllegalSutehaiAfterRiichi => {}
+                                        GameProcessError::Other(e) => {
+                                            self.show_modal(&format!("{:?}", e));
+                                        }
                                     }
+                                } else {
+                                    self.show_modal(&format!("{:?}", m));
                                 }
                                 Command::none()
                             }
@@ -534,55 +361,31 @@ impl Application for App {
     }
 
     fn view(&self) -> Element<Message> {
-        unsafe {
-            let isnt_riichi = !player_is_riichi(0);
-            let shanten = player_shanten(0);
-            let content: Element<_> = column![
-                button("Start").on_press(Message::Start),
-                text("ドラ"),
-                Row::from_vec(self.dora()),
-                row![
-                    text("AI"),
-                    combo_box(
-                        &self.ai_files,
-                        "AIファイル(.dll)",
-                        self.ai_path.as_ref(),
-                        Message::SelectAI
-                    ),
-                ]
-                .spacing(10),
-                text(format!("turn {}", self.turns)),
-                text(format!("{} シャンテン", shanten)),
-                Row::from_vec(self.kawahai()),
-                Row::from_vec(self.tehai()),
-                row![
-                    button("ツモ").on_press(Message::Tsumo),
-                    Checkbox::new("リーチ", self.is_riichi)
-                        .on_toggle_maybe(isnt_riichi.then_some(Message::ToggleRiichi)),
+        let content: Element<_> = match self.state {
+            AppState::Created => {
+                title_page::view(&self.ai_files, self.ai_path.as_ref())
+            },
+            AppState::Started | AppState::Ended => {
+                game_page::view(self.state, self.turns, self.is_riichi)
+            }
+        };
+
+        let containered_content = container(content).padding(10);
+
+        if self.is_show_modal {
+            let modal = container(
+                column![
+                    text(self.modal_message.clone()),
+                    button("Close").on_press(Message::HideModal),
                 ]
                 .spacing(10)
-            ]
-            .spacing(10)
-            .padding(10)
-            .into();
+                .padding(10),
+            )
+            .style(theme::Container::Box);
 
-            let containered_content = container(content);
-
-            if self.is_show_modal {
-                let modal = container(
-                    column![
-                        text(self.modal_message.clone()),
-                        button("Close").on_press(Message::HideModal),
-                    ]
-                    .spacing(10)
-                    .padding(10),
-                )
-                .style(theme::Container::Box);
-
-                Modal::new(containered_content, modal).into()
-            } else {
-                containered_content.into()
-            }
+            Modal::new(containered_content, modal).into()
+        } else {
+            containered_content.into()
         }
     }
 

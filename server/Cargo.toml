@@ -11,7 +11,7 @@ load-dll = ["ai_bridge/load-dll"]
 anyhow = "1.0.79"
 libc = "0.2.152"
 ai_bridge = { path = "../ai_bridge" }
-mahjong_core = { path = "../mahjong-app-engine/mahjong_core" }
+mahjong_core = { path = "../mahjong_core" }
 sentry = "0.32.1"
 clap = { version = "4.5.0", features = ["derive"] }
 dotenv = "0.15.0"

@@ -5,7 +5,10 @@ members = [
     "loadlibrary",
     "server",
     "ai_bridge",
-    "mahjong-app-engine/mahjong_core",
+    "mahjong_core",
+    "game_lib",
+    "proc_macros",
+    "sample",
     "app"
 ]
 

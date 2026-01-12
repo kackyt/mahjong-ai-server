@@ -11,6 +11,6 @@ load-dll = ["dep:loadlibrary"]
 anyhow = "1.0.79"
 libc = "0.2.152"
 loadlibrary = { path = "../loadlibrary", optional = true }
-mahjong_core = { path = "../mahjong-app-engine/mahjong_core" }
+mahjong_core = { path = "../mahjong_core" }
 once_cell = "1.19.0"
 sentry = "0.32.1"

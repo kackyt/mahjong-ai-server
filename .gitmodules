@@ -1,6 +1,3 @@
 [submodule "loadlibrary"]
 	path = loadlibrary
 	url = git@github.com:kackyt/loadlibrary.git
-[submodule "mahjong-app-engine"]
-	path = mahjong-app-engine
-	url = git@github.com:kackyt/mahjong-app-engine.git
