@@ -7,7 +7,7 @@ use crate::types::{Message, Settings};
 
 pub fn view<'a>(
     settings: &Settings,
-    ai_files: &'a combo_box::State<String>,
+    ai_files: &'a [combo_box::State<String>],
 ) -> Element<'a, Message> {
     let mode_select = row![
         text("Mode:"),
@@ -26,7 +26,7 @@ pub fn view<'a>(
             row![
                 text(format!("Player {}", i)),
                 combo_box(
-                    ai_files,
+                    &ai_files[i],
                     "Select AI",
                     settings.ai_names[i].as_ref(),
                     move |s| Message::SelectAI(i, s)

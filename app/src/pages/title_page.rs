@@ -15,7 +15,7 @@ pub fn view<'a>(
         .push(
             row![
                 text("AI"),
-                combo_box(ai_files, "AIファイル(.dll)", ai_path, Message::SelectAI),
+                combo_box(ai_files, "AIファイル(.dll)", ai_path, move |s| Message::SelectAI(1, s)),
             ]
             .spacing(10),
         )

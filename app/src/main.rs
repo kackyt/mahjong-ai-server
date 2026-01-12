@@ -1,5 +1,5 @@
 
-use std::{any, env};
+use std::{any, env, ffi::c_void};
 
 use ai_bridge::{
     ai_loader::{get_ai_symbol, load_ai},
@@ -36,6 +36,10 @@ use agent::{Agent, DllAgent, BuiltInAgent};
 
 extern crate libc;
 
+extern "stdcall" fn dummy_func(_: *mut c_void, _: usize, _: usize, _: usize) -> usize {
+    0
+}
+
 struct App {
     play_log: play_log::PlayLog,
     state: AppState,
@@ -46,7 +50,10 @@ struct App {
 
     settings: Settings,
 
-    ai_files: combo_box::State<String>,
+    ai_files: Vec<combo_box::State<String>>,
+    ai_path: Option<String>,
+    ai_symbol: MJPInterfaceFuncP,
+    ai_inst: *mut c_void,
 
     agents: Vec<Box<dyn Agent>>,
 
@@ -103,7 +110,7 @@ impl App {
                 cur.push(format!("{}.dll", name));
 
                 if let Ok(handle) = ai_bridge::ai_loader::load_ai(&cur) {
-                    if let Ok(symbol) = ai_bridge::ai_loader::get_ai_symbol(handle, "MJPInterfaceFunc") {
+                    if let Ok(symbol) = unsafe { ai_bridge::ai_loader::get_ai_symbol(handle, "MJPInterfaceFunc") } {
                         let ai_symbol: MJPInterfaceFuncP = unsafe { std::mem::transmute(symbol) };
                         unsafe {
                             let size = (ai_symbol)(std::ptr::null_mut(), MJPI_CREATEINSTANCE.try_into().unwrap(), 0, 0);
@@ -201,7 +208,7 @@ impl Application for App {
                     }
                 }
 
-                let player_count = if self.settings.is_1p_mode { 1 } else { 4 };
+                let player_count = 4;
                 state.create(b"test", player_count, &mut self.play_log);
                 state.shuffle();
                 state.start(&mut self.play_log);
@@ -213,7 +220,7 @@ impl Application for App {
                 self.action_state = ActionState::default();
 
                 let teban = state.teban as usize;
-                if teban != 0 && !self.settings.is_1p_mode {
+                if teban != 0 && self.settings.is_1p_mode {
                     if teban - 1 < self.agents.len() {
                         return self.agents[teban - 1].decide(teban);
                     }
@@ -243,7 +250,7 @@ impl Application for App {
                         state.tsumo(&mut self.play_log);
 
                         let teban = state.teban as usize;
-                        if teban != 0 {
+                        if teban != 0 && self.settings.is_1p_mode {
                              if teban - 1 < self.agents.len() {
                                 return self.agents[teban - 1].decide(teban);
                             }
@@ -270,9 +277,9 @@ impl Application for App {
 
                      // Check Human Actions on AI Discard
                      let discarder_idx = teban;
-                     let discard = &state.players[discarder_idx].kawahai[state.players[discarder_idx].kawahai_len as usize - 1];
+                     let discard = state.players[discarder_idx].kawahai[state.players[discarder_idx].kawahai_len as usize - 1].clone();
 
-                     if self.check_human_actions(discarder_idx, discard) {
+                     if self.check_human_actions(discarder_idx, &discard) {
                          // Stop flow, wait for Human input
                          return Command::none();
                      }
@@ -280,7 +287,7 @@ impl Application for App {
                      state.tsumo(&mut self.play_log);
 
                      let next_teban = state.teban as usize;
-                     if next_teban != 0 {
+                     if next_teban != 0 && self.settings.is_1p_mode {
                          if next_teban - 1 < self.agents.len() {
                             return self.agents[next_teban - 1].decide(next_teban);
                         }
@@ -320,7 +327,7 @@ impl Application for App {
                 // Continue game flow
                 state.tsumo(&mut self.play_log);
                 let next_teban = state.teban as usize;
-                if next_teban != 0 {
+                if next_teban != 0 && self.settings.is_1p_mode {
                      if next_teban - 1 < self.agents.len() {
                         return self.agents[next_teban - 1].decide(next_teban);
                     }
@@ -330,27 +337,33 @@ impl Application for App {
             Message::Ron => unsafe {
                 let state = &mut G_STATE;
                 let discarder_idx = state.teban as usize; // Who discarded
-                let discard = &state.players[discarder_idx].kawahai[state.players[discarder_idx].kawahai_len as usize - 1];
-                let _ = state.ron_agari(&mut self.play_log, 0, discarder_idx, discard);
+                let discard = state.players[discarder_idx].kawahai[state.players[discarder_idx].kawahai_len as usize - 1].clone();
+                let _ = state.ron_agari(&mut self.play_log, 0, discarder_idx, &discard);
                 self.state = AppState::Ended;
                 self.action_state = ActionState::default();
                 Command::none()
             },
             Message::Chii(idx) => unsafe {
                 let state = &mut G_STATE;
-                let _ = state.action(&mut self.play_log, ActionType::ACTION_CHII, 0, idx as u32);
+                if let Err(e) = state.action(&mut self.play_log, ActionType::ACTION_CHII, 0, idx as u32) {
+                    self.show_modal(&format!("{:?}", e));
+                }
                 self.action_state = ActionState::default();
                 Command::none()
             },
             Message::Pon(idx) => unsafe {
                 let state = &mut G_STATE;
-                let _ = state.action(&mut self.play_log, ActionType::ACTION_PON, 0, idx as u32);
+                if let Err(e) = state.action(&mut self.play_log, ActionType::ACTION_PON, 0, idx as u32) {
+                    self.show_modal(&format!("{:?}", e));
+                }
                 self.action_state = ActionState::default();
                 Command::none()
             },
             Message::Kan(idx) => unsafe {
                 let state = &mut G_STATE;
-                let _ = state.action(&mut self.play_log, ActionType::ACTION_KAN, 0, idx as u32);
+                if let Err(e) = state.action(&mut self.play_log, ActionType::ACTION_KAN, 0, idx as u32) {
+                    self.show_modal(&format!("{:?}", e));
+                }
                 self.action_state = ActionState::default();
                 Command::none()
             },
@@ -427,7 +440,10 @@ impl Application for App {
                 turns: 0,
                 is_show_modal: false,
                 modal_message: String::new(),
-                ai_files: combo_box::State::new(find_dll_files()),
+                ai_files: {
+                    let files = find_dll_files();
+                    (0..4).map(|_| combo_box::State::new(files.clone())).collect()
+                },
                 ai_path: None,
                 ai_symbol: dummy_func,
                 ai_inst: std::ptr::null_mut(),

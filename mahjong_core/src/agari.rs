@@ -42,7 +42,7 @@ pub struct AgariState {
     pub zikaze: u32,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Agari {
     pub score: i32,
     pub fu: i32,
