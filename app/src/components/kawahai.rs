@@ -35,23 +35,23 @@ pub fn view<'a>(kawahai: &[PaiT], kawahai_len: usize, angle: u16, image_cache: &
 
     if angle == 180 {
         // Top Player
-        // Items: Right->Left (Screen) -> Reverse Items
-        // Chunks: Bottom->Top (Screen) -> Reverse Chunks
+        // Items: Right->Left (Screen) -> Reverse Items (L->R Flow)
+        // Chunks: Bottom->Top (Screen) (Center->Hand) -> Reverse Chunks
         for c in &mut chunks_vec {
             c.reverse();
         }
         chunks_vec.reverse();
     } else if angle == 270 {
         // Right Player
-        // Items: Top->Bottom (Screen) to flow Down (Clockwise). Natural is T->B. -> No Reverse
-        // Chunks: Left->Right (Screen) -> No Reverse
-    } else if angle == 90 {
-        // Left Player
-        // Items: Bottom->Top (Screen) to flow Up (Clockwise). Natural is T->B. -> Reverse Items
-        // Chunks: Right->Left (Screen) -> Reverse Chunks
+        // Items: Bottom->Top (Screen) -> Reverse Items (L->R Flow)
+        // Chunks: Left->Right (Screen) (Center->Hand) -> Normal Chunks
         for c in &mut chunks_vec {
              c.reverse();
         }
+    } else if angle == 90 {
+        // Left Player
+        // Items: Top->Bottom (Screen) (L->R Flow) -> Normal Items
+        // Chunks: Right->Left (Screen) (Center->Hand) -> Reverse Chunks
         chunks_vec.reverse();
     }
 
