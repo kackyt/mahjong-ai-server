@@ -20,11 +20,11 @@ pub enum Message {
     Pass,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Debug)]
 pub enum AppState {
     Created,
     Started,
-    Ended,
+    Ended(Option<mahjong_core::agari::Agari>),
 }
 
 #[derive(Clone, Debug)]

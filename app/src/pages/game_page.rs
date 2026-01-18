@@ -28,7 +28,7 @@ pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool, image_cache: &Imag
         let dora_elem = dora::view(
             &core_state.get_dora(),
             &core_state.get_uradora(),
-            state == AppState::Ended,
+            matches!(state, AppState::Ended(_)),
         );
 
         let kawahai_0 = kawahai::view(&core_state.players[0].kawahai, core_state.players[0].kawahai_len as usize, 0, image_cache);
@@ -41,7 +41,7 @@ pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool, image_cache: &Imag
             core_state.players[0].tehai_len as usize,
             &core_state.players[0].tsumohai,
             core_state.players[0].is_tsumo,
-            state == AppState::Started,
+            matches!(state, AppState::Started),
         );
         
         // P0 Fulo

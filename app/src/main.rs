@@ -274,8 +274,15 @@ impl Application for App {
                 let teban = state.teban as usize;
 
                 if flag == MJPIR_TSUMO {
-                     let _ = state.tsumo_agari(&mut self.play_log);
-                     self.state = AppState::Ended;
+                     let ret = state.tsumo_agari(&mut self.play_log);
+                     match ret {
+                        Ok(agari) => {
+                             self.state = AppState::Ended(Some(agari));
+                        }
+                        Err(_) => {
+                            self.state = AppState::Ended(None);
+                        }
+                     }
                 } else if flag == MJPIR_SUTEHAI {
                      if let Err(e) = state.sutehai(&mut self.play_log, index as usize, false) {
                          self.show_modal(&format!("{:?}", e));
@@ -306,8 +313,8 @@ impl Application for App {
                 unsafe {
                     let state = &mut G_STATE;
                     let result = state.tsumo_agari(&mut self.play_log);
-                    if result.is_ok() {
-                        self.state = AppState::Ended;
+                    if let Ok(agari) = result {
+                        self.state = AppState::Ended(Some(agari));
                     }
                 }
                 Command::none()
@@ -345,11 +352,19 @@ impl Application for App {
                 let state = &mut G_STATE;
                 let discarder_idx = state.teban as usize; // Who discarded
                 let discard = state.players[discarder_idx].kawahai[state.players[discarder_idx].kawahai_len as usize - 1].clone();
-                let _ = state.ron_agari(&mut self.play_log, 0, discarder_idx, &discard);
-                self.state = AppState::Ended;
+                match state.ron_agari(&mut self.play_log, 0, discarder_idx, &discard) {
+                    Ok(agari) => {
+                        self.state = AppState::Ended(Some(agari));
+                    },
+                    Err(e) => {
+                        self.show_modal(&format!("Error: {:?}", e));
+                        // Do NOT transition to Ended state
+                    }
+                }
                 self.action_state = ActionState::default();
                 Command::none()
             },
+
             Message::Chii(idx) => unsafe {
                 let state = &mut G_STATE;
                 if let Err(e) = state.action(&mut self.play_log, ActionType::ACTION_CHII, 0, idx as u32) {
@@ -383,7 +398,7 @@ impl Application for App {
                 settings_page::view(&self.settings, &self.ai_files)
             },
             AppState::Started => {
-                let game = game_page::view(self.state, self.turns, self.is_riichi, &self.image_cache);
+                let game = game_page::view(self.state.clone(), self.turns, self.is_riichi, &self.image_cache);
 
                 if self.action_state.has_any() {
                     let mut buttons = row![];
@@ -411,8 +426,8 @@ impl Application for App {
                     game.into()
                 }
             }
-            AppState::Ended => {
-                result_page::view()
+            AppState::Ended(ref agari) => {
+                result_page::view(agari.as_ref())
             }
         };
 
