@@ -17,3 +17,4 @@ mahjong_core = { path = "../mahjong_core" }
 log = "0.4.22"
 libc = "0.2.157"
 anyhow = "1.0.86"
+image = "0.25.9"

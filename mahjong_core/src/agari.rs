@@ -42,7 +42,7 @@ pub struct AgariState {
     pub zikaze: u32,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Agari {
     pub score: i32,
     pub fu: i32,
@@ -90,7 +90,7 @@ fn is_penchan(mentsu: &Mentsu) -> bool {
 }
 
 pub trait AgariBehavior {
-    fn get_agari(&self, who: usize, mentsu: &Vec<Mentsu>, fulo: &Vec<Mentsu>) -> AgariState;
+    fn get_agari(&self, who: usize, mentsu: &Vec<Mentsu>, fulo: &Vec<Mentsu>, is_ron: bool) -> AgariState;
     fn get_condition_yaku(&self, who: usize, state: &AgariState) -> Vec<(String, i32)>;
     fn get_dora_yaku(
         &self,
@@ -105,6 +105,7 @@ pub trait AgariBehavior {
         mentsu: &Vec<Vec<Mentsu>>,
         fulo: &Vec<Mentsu>,
         nukidora: usize,
+        is_ron: bool,
     ) -> anyhow::Result<Agari>;
 }
 
@@ -187,11 +188,11 @@ fn is_ippatsu(_state: &AgariState, player: &PlayerT) -> Option<(String, i32)> {
 }
 
 impl AgariBehavior for GameStateT {
-    fn get_agari(&self, who: usize, mentsu: &Vec<Mentsu>, fulo: &Vec<Mentsu>) -> AgariState {
+    fn get_agari(&self, who: usize, mentsu: &Vec<Mentsu>, fulo: &Vec<Mentsu>, is_ron: bool) -> AgariState {
         let mut agari = AgariState {
             fu: 20,
             menzen: true,
-            tsumo: true,
+            tsumo: !is_ron,
             shuntsu: Default::default(),
             koutsu: Default::default(),
             toitsu: Default::default(),
@@ -557,13 +558,20 @@ impl AgariBehavior for GameStateT {
         mentsu: &Vec<Vec<Mentsu>>,
         fulo: &Vec<Mentsu>,
         nukidora: usize,
+        is_ron: bool,
     ) -> anyhow::Result<Agari> {
         let ret = mentsu
             .iter()
             .map(|m| {
-                let agari = self.get_agari(who, m, fulo);
+                let agari = self.get_agari(who, m, fulo, is_ron);
                 let mut yakus = self.get_condition_yaku(who, &agari);
                 yakus.extend(agari.get_yaku_list());
+                
+                // Enforce at least one Yaku requirement (excluding Dora)
+                if yakus.is_empty() {
+                    return Agari::default();
+                }
+
                 yakus.extend(self.get_dora_yaku(who, m, fulo, nukidora));
                 agari.get_agari(&yakus)
             })
