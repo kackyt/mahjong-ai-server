@@ -1,8 +1,12 @@
+#[cfg(feature = "std")]
 pub mod fbs_utils;
+#[cfg(feature = "std")]
 pub mod game_process;
 pub mod mahjong_generated;
 pub mod shanten;
+#[cfg(feature = "std")]
 pub mod agari;
+#[cfg(feature = "std")]
 pub mod play_log;
 #[cfg(feature = "load-pailist")]
 pub mod load_pailist;
