@@ -1,16 +1,16 @@
-use ai_bridge::interface::G_STATE;
-use iced::widget::row;
+use iced::widget::{container, row};
 use iced::{
+    color,
     widget::{button, column, text, Checkbox, Row},
-    Element,
+    Background, Element, Length,
 };
 
 use crate::{
-    components::{dora, kawahai, tehai, fulo},
+    components::{dora, kawahai, tehai, fulo}, 
     types::{AppState, Message},
-    utils::painum2path,
-    images::ImageCache,
+    images::ImageCache, 
 };
+use ai_bridge::interface::G_STATE;
 
 pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool, image_cache: &ImageCache) -> Element<'a, Message> {
     unsafe {
@@ -19,88 +19,150 @@ pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool, image_cache: &Imag
         let isnt_riichi = !core_state.players[0].is_riichi;
         let shanten = {
              let mut tehai: Vec<mahjong_core::mahjong_generated::open_mahjong::PaiT> = core_state.players[0].tehai.iter().cloned().collect();
-             if core_state.players[0].is_tsumo {
-                tehai.push(core_state.players[0].tsumohai.clone());
-             }
+             tehai.push(core_state.players[0].tsumohai.clone());
              mahjong_core::shanten::PaiState::from(&tehai).get_shanten(0)
         };
 
         let dora_elem = dora::view(
             &core_state.get_dora(),
-            &core_state.get_uradora(),
-            matches!(state, AppState::Ended(_)),
+            &core_state.get_uradora(), 
+            state == AppState::Ended,
         );
 
-        let kawahai_0 = kawahai::view(&core_state.players[0].kawahai, core_state.players[0].kawahai_len as usize, 0, image_cache);
-        let kawahai_1 = kawahai::view(&core_state.players[1].kawahai, core_state.players[1].kawahai_len as usize, 270, image_cache);
-        let kawahai_2 = kawahai::view(&core_state.players[2].kawahai, core_state.players[2].kawahai_len as usize, 180, image_cache);
-        let kawahai_3 = kawahai::view(&core_state.players[3].kawahai, core_state.players[3].kawahai_len as usize, 90, image_cache);
+        let player_len = core_state.player_len as usize;
 
-        let tehai_elem = tehai::view(
-            &core_state.players[0].tehai,
-            core_state.players[0].tehai_len as usize,
-            &core_state.players[0].tsumohai,
-            core_state.players[0].is_tsumo,
-            matches!(state, AppState::Started),
-        );
-        
-        // P0 Fulo
-        let fulo_0 = fulo::view(&core_state.players[0].mentsu[0..core_state.players[0].mentsu_len as usize], image_cache);
-        // Opponent Fulos could be added here similar to P0, positioned near their kawahai.
-        // For brevity and layout simplicity I'll stick to P0 Fulo as explicit request was "Called melds separate from hand".
-        // But requested rotation for AI Kawahai implies visual polish.
-        // I will add Fulo placeholders for opponents? Layout gets tricky without absolute positioning.
-        // Ignoring opponent fulo for now to avoid breaking layout, focusing on P0 Fulo and AI Kawahai rotation.
+        if player_len == 4 {
+             let p0 = &core_state.players[0];
+             let p1 = &core_state.players[1];
+             let p2 = &core_state.players[2];
+             let p3 = &core_state.players[3];
 
-        let center_area = column![
-            text("ドラ").style(Color::WHITE),
-            dora_elem,
-            text(format!("turn {}", turns)).style(Color::WHITE),
-            text(format!("{} シャンテン", shanten)).style(Color::WHITE),
-        ].spacing(5).align_items(iced::Alignment::Center);
+             // Rotation conventions:
+             // P0 (Bottom): 0
+             // P1 (Right/Shimocha): 270 (Vertical)
+             // P2 (Top/Toimen): 180 (Inverted).
+             // P3 (Left/Kamicha): 90 (Top pointing Right).
 
-        let middle_row = row![
-            column![text("Player 3 (West)").size(20).style(Color::WHITE), kawahai_3].spacing(5).align_items(iced::Alignment::Center),
-            center_area,
-            column![text("Player 1 (East/South)").size(20).style(Color::WHITE), kawahai_1].spacing(5).align_items(iced::Alignment::Center),
-        ].spacing(40).align_items(iced::Alignment::Center);
+             let p2_kawahai = kawahai::view(&p2.kawahai, p2.kawahai_len as usize, image_cache, 180, false);
+             let p3_kawahai = kawahai::view(&p3.kawahai, p3.kawahai_len as usize, image_cache, 90, true);
+             let p1_kawahai = kawahai::view(&p1.kawahai, p1.kawahai_len as usize, image_cache, 270, true);
+             let p0_kawahai = kawahai::view(&p0.kawahai, p0.kawahai_len as usize, image_cache, 0, false);
 
-        use iced::{Color, Background, widget::container};
+             let p0_tehai_elem = tehai::view(
+                &p0.tehai,
+                p0.tehai_len as usize,
+                &p0.tsumohai,
+                p0.is_tsumo,
+                state == AppState::Started,
+                image_cache,
+                0,
+                false,
+                false,
+             );
+             
+             // Opponent Tehais (Face down)
+             let p1_tehai = tehai::view(&p1.tehai, p1.tehai_len as usize, &p1.tsumohai, p1.is_tsumo, false, image_cache, 270, true, true);
+             let p2_tehai = tehai::view(&p2.tehai, p2.tehai_len as usize, &p2.tsumohai, p2.is_tsumo, false, image_cache, 180, true, false);
+             let p3_tehai = tehai::view(&p3.tehai, p3.tehai_len as usize, &p3.tsumohai, p3.is_tsumo, false, image_cache, 90, true, true);
 
-        container(
-            column![
-                // Top (Player 2)
-                column![text("Player 2 (North)").size(20).style(Color::WHITE), kawahai_2].spacing(5).align_items(iced::Alignment::Center),
-                
-                middle_row,
-                
-                // Bottom (Player 0)
+             // Fulou (Melds)
+             let p0_fulo = fulo::view(&p0.mentsu[0..p0.mentsu_len as usize], image_cache, false);
+             let p1_fulo = fulo::view(&p1.mentsu[0..p1.mentsu_len as usize], image_cache, true);
+             let p2_fulo = fulo::view(&p2.mentsu[0..p2.mentsu_len as usize], image_cache, false);
+             let p3_fulo = fulo::view(&p3.mentsu[0..p3.mentsu_len as usize], image_cache, true);
+
+             // Styles
+             let text_style = |t: &str| text(t).style(color!(255, 255, 255)).size(20);
+
+             let content = column![
+                // Top: Player 2 (Hand + Fulo + Kawahai) - Inverted order roughly
                 column![
-                    text("Player 0 (You)").size(20).style(Color::WHITE),
-                    kawahai_0,
-                    row![tehai_elem, fulo_0].spacing(20), // Hand + Fulo
-                    row![
+                     text_style("Player 2 (North)"),
+                     row![p2_fulo, p2_tehai].spacing(10),
+                     p2_kawahai
+                ].spacing(10).align_items(iced::Alignment::Center),
+                
+                // Middle
+                row![
+                    // Left: Player 3. Hand | Fulo | River
+                    column![
+                         text_style("Player 3 (West)"),
+                         row![p3_tehai, p3_fulo, p3_kawahai].spacing(10).align_items(iced::Alignment::Center)
+                    ].spacing(10).align_items(iced::Alignment::Center),
+                    
+                    // Center
+                    column![
+                        text_style("ドラ"),
+                        dora_elem,
+                        text_style(&format!("turn {}", turns)),
+                        text_style(&format!("{} シャンテン", shanten)),
+                    ].spacing(10).padding(20).align_items(iced::Alignment::Center),
+                    
+                    // Right: Player 1. River | Fulo | Hand (Mirrored)
+                    column![
+                         text_style("Player 1 (East/South)"),
+                         row![p1_kawahai, p1_fulo, p1_tehai].spacing(10).align_items(iced::Alignment::Center)
+                    ].spacing(10).align_items(iced::Alignment::Center),
+                ].spacing(50).align_items(iced::Alignment::Center),
+
+                // Bottom: Player 0
+                column![
+                     text_style("Player 0 (You)"),
+                     p0_kawahai,
+                     p0_tehai_elem, // Tehai
+                     p0_fulo,       // Fulo
+                     row![
                         button("ツモ").on_press(Message::Tsumo),
-                        row![
-                            Checkbox::new("", is_riichi)
-                                .on_toggle_maybe(isnt_riichi.then_some(Message::ToggleRiichi)),
-                            text("リーチ").style(Color::WHITE),
-                        ].spacing(5)
+                        Checkbox::new("リーチ", is_riichi)
+                            .on_toggle_maybe(isnt_riichi.then_some(Message::ToggleRiichi)),
                     ].spacing(10)
                 ].spacing(10).align_items(iced::Alignment::Center)
+             ]
+             .spacing(20)
+             .align_items(iced::Alignment::Center);
+
+             container(content)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .center_x()
+                .center_y()
+                .style(move |_: &_| container::Appearance {
+                        background: Some(Background::Color(color!(42, 126, 25))), 
+                        ..Default::default()
+                })
+                .into()
+
+        } else {
+             // 1-Player
+             let kawahai_elem = kawahai::view(&core_state.players[0].kawahai, core_state.players[0].kawahai_len as usize, image_cache, 0, false);
+             let tehai_elem = tehai::view(
+                &core_state.players[0].tehai,
+                core_state.players[0].tehai_len as usize,
+                &core_state.players[0].tsumohai,
+                core_state.players[0].is_tsumo,
+                state == AppState::Started,
+                image_cache,
+                0,
+                false,
+                false
+            );
+
+            column![
+                text("ドラ"),
+                dora_elem,
+                text(format!("turn {}", turns)),
+                text(format!("{} シャンテン", shanten)),
+                kawahai_elem,
+                tehai_elem,
+                row![
+                    button("ツモ").on_press(Message::Tsumo),
+                    Checkbox::new("リーチ", is_riichi)
+                        .on_toggle_maybe(isnt_riichi.then_some(Message::ToggleRiichi)),
+                ]
+                .spacing(10)
             ]
-            .spacing(40)
-            .padding(20)
-            .align_items(iced::Alignment::Center)
-        )
-        .width(iced::Length::Fill)
-        .height(iced::Length::Fill)
-        .center_x()
-        .center_y()
-        .style(|_: &_| container::Appearance {
-            background: Some(Background::Color(Color::from_rgb8(34, 139, 34))), // Forest Green
-            ..Default::default()
-        })
-        .into()
+            .spacing(10)
+            .into()
+        }
     }
 }

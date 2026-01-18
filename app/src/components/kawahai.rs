@@ -1,73 +1,88 @@
 use iced::{
     color,
-    widget::{container, image, Row, Column},
+    widget::{column, container, image, Row},
     Background, Element,
 };
 use mahjong_core::mahjong_generated::open_mahjong::PaiT;
 
 use crate::{images::ImageCache, Message};
 
-pub fn view<'a>(kawahai: &[PaiT], kawahai_len: usize, angle: u16, image_cache: &ImageCache) -> Element<'a, Message> {
-    let valid_kawahai = &kawahai[0..kawahai_len];
-    let mut chunks_vec: Vec<Vec<Element<'a, Message>>> = Vec::new();
+pub fn view<'a>(
+    kawahai: &[PaiT],
+    kawahai_len: usize,
+    image_cache: &ImageCache,
+    angle: u16,
+    is_vertical: bool,
+) -> Element<'a, Message> {
+    if is_vertical {
+        // Vertical: Row of Columns
+        // Each Column has max 6 tiles (Top to Bottom)
+        // Columns added Left to Right
+        let mut cols = Row::new().spacing(0);
+        let mut current_col = column![].spacing(0);
+        let mut count = 0;
 
-    for chunk_slice in valid_kawahai.chunks(6) {
-        let mut chunk_elements = Vec::new();
-        for pai in chunk_slice {
-            let handle = image_cache.get(pai.pai_num as u32, angle, pai.is_nakare);
-            let img = image(handle);
-            
-            let container_widget = container(img).padding(1);
-
-            let styled = if pai.is_riichi {
-                 container_widget.style(move |_: &_| container::Appearance {
+        for pai in kawahai.iter().take(kawahai_len) {
+            let handle = image_cache.get(pai.pai_num as u32, angle, false);
+            let img: Element<'a, Message> = if pai.is_riichi {
+                container(image(handle))
+                    .style(move |_: &_| container::Appearance {
                         background: Some(Background::Color(color!(0, 0, 255))),
                         ..Default::default()
                     })
+                    .padding([0, 0, 4, 0])
+                    .into()
             } else {
-                container_widget
+                container(image(handle)).into()
             };
-            
-            chunk_elements.push(styled.into());
-        }
-        chunks_vec.push(chunk_elements);
-    }
 
-    if angle == 180 {
-        // Top Player
-        // Items: Right->Left (Screen) -> Reverse Items (L->R Flow)
-        // Chunks: Bottom->Top (Screen) (Center->Hand) -> Reverse Chunks
-        for c in &mut chunks_vec {
-            c.reverse();
-        }
-        chunks_vec.reverse();
-    } else if angle == 270 {
-        // Right Player
-        // Items: Bottom->Top (Screen) -> Reverse Items (L->R Flow)
-        // Chunks: Left->Right (Screen) (Center->Hand) -> Normal Chunks
-        for c in &mut chunks_vec {
-             c.reverse();
-        }
-    } else if angle == 90 {
-        // Left Player
-        // Items: Top->Bottom (Screen) (L->R Flow) -> Normal Items
-        // Chunks: Right->Left (Screen) (Center->Hand) -> Reverse Chunks
-        chunks_vec.reverse();
-    }
+            current_col = current_col.push(img);
+            count += 1;
 
-    if angle == 90 || angle == 270 {
-        // Vertical Flow (Side Players)
-        let mut main_row = Row::new();
-        for c in chunks_vec {
-            main_row = main_row.push(Column::with_children(c));
+            if count % 6 == 0 {
+                cols = cols.push(current_col);
+                current_col = column![].spacing(0);
+            }
         }
-        main_row.into()
+        if count % 6 != 0 {
+            cols = cols.push(current_col);
+        }
+        cols.into()
     } else {
-        // Horizontal Flow (Top/Bottom Players)
-        let mut main_col = Column::new();
-        for c in chunks_vec {
-            main_col = main_col.push(Row::with_children(c));
+        // Horizontal: Column of Rows (Standard)
+        // Each Row has max 6 tiles (Left to Right)
+        // Rows added Top to Bottom
+        let mut rows = column![].spacing(0);
+        let mut current_row = Row::new().spacing(0);
+        let mut count = 0;
+
+        for pai in kawahai.iter().take(kawahai_len) {
+            let handle = image_cache.get(pai.pai_num as u32, angle, false);
+            let img: Element<'a, Message> = if pai.is_riichi {
+                container(image(handle))
+                    .style(move |_: &_| container::Appearance {
+                        background: Some(Background::Color(color!(0, 0, 255))),
+                        ..Default::default()
+                    })
+                    .padding([0, 0, 4, 0])
+                    .into()
+            } else {
+                container(image(handle)).into()
+            };
+
+            current_row = current_row.push(img);
+            count += 1;
+
+            if count % 6 == 0 {
+                rows = rows.push(current_row);
+                current_row = Row::new().spacing(0);
+            }
         }
-        main_col.into()
+
+        if count % 6 != 0 {
+            rows = rows.push(current_row);
+        }
+
+        rows.into()
     }
 }

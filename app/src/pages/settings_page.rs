@@ -1,9 +1,8 @@
+use crate::types::{GameMode, Message, Settings};
 use iced::{
-    widget::{button, combo_box, row, text, Column, Container, Checkbox},
+    widget::{button, combo_box, pick_list, row, text, Column, Container},
     Element, Length,
 };
-
-use crate::types::{Message, Settings};
 
 pub fn view<'a>(
     settings: &Settings,
@@ -11,28 +10,33 @@ pub fn view<'a>(
 ) -> Element<'a, Message> {
     let mode_select = row![
         text("Mode:"),
-        Checkbox::new("1-Player (vs 3 AI)", settings.is_1p_mode)
-            .on_toggle(|b| Message::SelectMode(b)),
-    ].spacing(20);
+        pick_list(
+            &GameMode::ALL[..],
+            Some(settings.game_mode),
+            Message::SelectMode
+        ),
+    ]
+    .spacing(20);
 
     let mut ai_selectors = Column::new().spacing(10);
 
-    // Player 0 is usually human, but let's allow AI selection if we want 4 AI demo?
-    // User request: "自分以外は組込みのAIとdll経由のAIを選べるように" (Allow selecting built-in or DLL AI for others, implying Player 0 is Self/Human).
-
-    // So Player 1, 2, 3 selection.
-    for i in 1..4 {
-        ai_selectors = ai_selectors.push(
-            row![
-                text(format!("Player {}", i)),
-                combo_box(
-                    &ai_files[i],
-                    "Select AI",
-                    settings.ai_names[i].as_ref(),
-                    move |s| Message::SelectAI(i, s)
-                )
-            ].spacing(10)
-        );
+    // Player 0 is usually human
+    // AI selection for Player 1, 2, 3 only visible in FourPlayerVsAI mode
+    if settings.game_mode == GameMode::FourPlayerVsAI {
+        for i in 1..4 {
+            ai_selectors = ai_selectors.push(
+                row![
+                    text(format!("Player {}", i)),
+                    combo_box(
+                        &ai_files[i],
+                        "Select AI",
+                        settings.ai_names[i].as_ref(),
+                        move |s| Message::SelectAI(i, s)
+                    )
+                ]
+                .spacing(10),
+            );
+        }
     }
 
     Container::new(
