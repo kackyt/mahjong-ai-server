@@ -10,6 +10,11 @@ pub enum Message {
     SelectAI(usize, String),
     AICommand(u32),
     SelectMode(GameMode),
+    Ron,
+    Pass,
+    Pon,
+    Chi,
+    Kan,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -12,7 +12,7 @@ use crate::{
 };
 use ai_bridge::interface::G_STATE;
 
-pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool, image_cache: &ImageCache) -> Element<'a, Message> {
+pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool, image_cache: &ImageCache, can_ron: bool, can_pon: bool, can_chi: bool, can_kan: bool) -> Element<'a, Message> {
     unsafe {
         let core_state = &G_STATE;
         
@@ -74,52 +74,127 @@ pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool, image_cache: &Imag
              // Styles
              let text_style = |t: &str| text(t).style(color!(255, 255, 255)).size(20);
 
-             let content = column![
-                // Top: Player 2 (Hand + Fulo + Kawahai) - Inverted order roughly
-                column![
+             // Fixed Layout Construction
+             
+             // 1. Top Bar (P2 Hand) - Fixed Height
+             let top_bar = container(
+                 column![
                      text_style("Player 2 (North)"),
-                     row![p2_fulo, p2_tehai].spacing(10),
-                     p2_kawahai
-                ].spacing(10).align_items(iced::Alignment::Center),
-                
-                // Middle
-                row![
-                    // Left: Player 3. Hand | Fulo | River
-                    column![
-                         text_style("Player 3 (West)"),
-                         row![p3_tehai, p3_fulo, p3_kawahai].spacing(10).align_items(iced::Alignment::Center)
-                    ].spacing(10).align_items(iced::Alignment::Center),
-                    
-                    // Center
-                    column![
-                        text_style("ドラ"),
-                        dora_elem,
-                        text_style(&format!("turn {}", turns)),
-                        text_style(&format!("{} シャンテン", shanten)),
-                    ].spacing(10).padding(20).align_items(iced::Alignment::Center),
-                    
-                    // Right: Player 1. River | Fulo | Hand (Mirrored)
-                    column![
-                         text_style("Player 1 (East/South)"),
-                         row![p1_kawahai, p1_fulo, p1_tehai].spacing(10).align_items(iced::Alignment::Center)
-                    ].spacing(10).align_items(iced::Alignment::Center),
-                ].spacing(50).align_items(iced::Alignment::Center),
+                     row![p2_fulo, p2_tehai].spacing(5).align_items(iced::Alignment::Center),
+                 ].spacing(5).align_items(iced::Alignment::Center)
+             )
+             .height(Length::Fixed(120.0))
+             .width(Length::Fill)
+             .align_y(iced::alignment::Vertical::Bottom)
+             .center_x();
 
-                // Bottom: Player 0
-                column![
+             // 2. Bottom Bar (P0 Hand) - Fixed Height
+             let bottom_bar = container(
+                 column![
                      text_style("Player 0 (You)"),
-                     p0_kawahai,
                      p0_tehai_elem, // Tehai
                      p0_fulo,       // Fulo
+                     {
+                         let mut r = row![
+                            button("ツモ").on_press(Message::Tsumo),
+                            Checkbox::new("リーチ", is_riichi)
+                                .on_toggle_maybe(isnt_riichi.then_some(Message::ToggleRiichi)),
+                        ].spacing(10);
+                        if can_ron {
+                            r = r.push(button("ロン").on_press(Message::Ron).style(iced::theme::Button::Primary));
+                        }
+                        if can_pon {
+                            r = r.push(button("ポン").on_press(Message::Pon));
+                        }
+                        if can_chi {
+                            r = r.push(button("チー").on_press(Message::Chi));
+                        }
+                        if can_kan {
+                            r = r.push(button("カン").on_press(Message::Kan));
+                        }
+                        if can_ron || can_pon || can_chi || can_kan {
+                            r = r.push(button("パス").on_press(Message::Pass).style(iced::theme::Button::Secondary));
+                        }
+                        r
+                     }
+                 ].spacing(5).align_items(iced::Alignment::Center)
+             )
+             .height(Length::Fixed(140.0))
+             .width(Length::Fill)
+             .align_y(iced::alignment::Vertical::Top)
+             .center_x();
+
+             // 3. Middle Section
+             
+             // Left Bar (P3 Hand) - Fixed Width
+             let left_bar = container(
+                 column![
+                     text_style("Player 3 (West)"),
+                     row![p3_tehai, p3_fulo].spacing(5).align_items(iced::Alignment::Center), 
+                 ].spacing(5).align_items(iced::Alignment::Center)
+             )
+             .width(Length::Fixed(120.0))
+             .height(Length::Fill)
+             .align_x(iced::alignment::Horizontal::Right)
+             .center_y();
+
+             // Right Bar (P1 Hand) - Fixed Width
+             let right_bar = container(
+                 column![
+                      text_style("Player 1 (East/South)"),
+                      row![p1_fulo, p1_tehai].spacing(5).align_items(iced::Alignment::Center)
+                 ].spacing(5).align_items(iced::Alignment::Center)
+             )
+             .width(Length::Fixed(120.0))
+             .height(Length::Fill)
+             .align_x(iced::alignment::Horizontal::Left)
+             .center_y();
+
+             // Center Table (Rivers + Info)
+             let center_info = column![
+                 text_style("ドラ"),
+                 dora_elem,
+                 text_style(&format!("残り {} 枚", core_state.remain())),
+                 text_style(&format!("{} シャンテン", shanten)),
+             ].spacing(5).padding(10).align_items(iced::Alignment::Center);
+
+             let center_table = container(
+                 column![
+                     // P2 River (Top Center)
+                     p2_kawahai,
+                     
+                     iced::widget::Space::with_height(Length::Fill),
+                     
+                     // Middle Row (P3 River | Info | P1 River)
                      row![
-                        button("ツモ").on_press(Message::Tsumo),
-                        Checkbox::new("リーチ", is_riichi)
-                            .on_toggle_maybe(isnt_riichi.then_some(Message::ToggleRiichi)),
-                    ].spacing(10)
-                ].spacing(10).align_items(iced::Alignment::Center)
-             ]
-             .spacing(20)
-             .align_items(iced::Alignment::Center);
+                         p3_kawahai,
+                         iced::widget::Space::with_width(Length::Fill),
+                         center_info,
+                         iced::widget::Space::with_width(Length::Fill),
+                         p1_kawahai
+                     ].align_items(iced::Alignment::Center),
+
+                     iced::widget::Space::with_height(Length::Fill),
+
+                     // P0 River (Bottom Center)
+                     p0_kawahai
+                 ].align_items(iced::Alignment::Center)
+             )
+             .width(Length::Fill)
+             .height(Length::Fill)
+             .padding(10); 
+
+             let middle_row = row![
+                 left_bar,
+                 center_table,
+                 right_bar
+             ].height(Length::Fill);
+
+             let content = column![
+                 top_bar,
+                 middle_row,
+                 bottom_bar
+             ];
 
              container(content)
                 .width(Length::Fill)
@@ -154,12 +229,29 @@ pub fn view<'a>(state: AppState, turns: u32, is_riichi: bool, image_cache: &Imag
                 text(format!("{} シャンテン", shanten)),
                 kawahai_elem,
                 tehai_elem,
-                row![
-                    button("ツモ").on_press(Message::Tsumo),
-                    Checkbox::new("リーチ", is_riichi)
-                        .on_toggle_maybe(isnt_riichi.then_some(Message::ToggleRiichi)),
-                ]
-                .spacing(10)
+                {
+                     let mut r = row![
+                        button("ツモ").on_press(Message::Tsumo),
+                        Checkbox::new("リーチ", is_riichi)
+                            .on_toggle_maybe(isnt_riichi.then_some(Message::ToggleRiichi)),
+                    ].spacing(10);
+                        if can_ron {
+                            r = r.push(button("ロン").on_press(Message::Ron));
+                        }
+                        if can_pon {
+                            r = r.push(button("ポン").on_press(Message::Pon));
+                        }
+                        if can_chi {
+                            r = r.push(button("チー").on_press(Message::Chi));
+                        }
+                        if can_kan {
+                            r = r.push(button("カン").on_press(Message::Kan));
+                        }
+                        if can_ron || can_pon || can_chi || can_kan {
+                            r = r.push(button("パス").on_press(Message::Pass));
+                        }
+                        r
+                     }
             ]
             .spacing(10)
             .into()

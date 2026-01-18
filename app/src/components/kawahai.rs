@@ -1,7 +1,7 @@
 use iced::{
     color,
     widget::{column, container, image, Row},
-    Background, Element,
+    Background, Element, Length,
 };
 use mahjong_core::mahjong_generated::open_mahjong::PaiT;
 
@@ -28,8 +28,20 @@ pub fn view<'a>(
     // Helper to create element
     let create_elem = |pai: &PaiT| {
             let handle = image_cache.get(pai.pai_num as u32, angle, false);
+            
+            // Scale tiles: 
+            // 0/180 (Vertical/Portrait): Height ~38px
+            // 90/270 (Horizontal/Landscape): Height ~28px
+            // (Assuming approx 3:4 aspect ratio)
+            let img_height = match angle {
+                90 | 270 => 29.0,
+                _ => 38.0,
+            };
+
+            let img = image(handle).height(Length::Fixed(img_height));
+
             if pai.is_riichi {
-                container(image(handle))
+                container(img)
                     .style(move |_: &_| container::Appearance {
                         background: Some(Background::Color(color!(0, 0, 255))),
                         ..Default::default()
@@ -37,7 +49,7 @@ pub fn view<'a>(
                     .padding([0, 0, 4, 0])
                     .into()
             } else {
-                container(image(handle)).into()
+                container(img).into()
             }
     };
 
