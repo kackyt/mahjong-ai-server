@@ -14,75 +14,71 @@ pub fn view<'a>(
     angle: u16,
     is_vertical: bool,
 ) -> Element<'a, Message> {
+    // Determine reversal flags based on angle
+    // reverse_flow: Reverse order of tiles within a chunk (Row/Column)
+    // reverse_stack: Reverse order of chunks (Rows/Columns)
+    let (reverse_flow, reverse_stack) = match angle {
+        0 => (false, false),  // P0: L->R, T->B (Stack Std)
+        90 => (false, true),  // P3: T->B (Flow Std), R->L (Stack Rev)
+        180 => (true, true),  // P2: R->L (Flow Rev), B->T (Stack Rev)
+        270 => (true, false), // P1: B->T (Flow Rev), L->R (Stack Std)
+        _ => (false, false),
+    };
+
+    // Helper to create element
+    let create_elem = |pai: &PaiT| {
+            let handle = image_cache.get(pai.pai_num as u32, angle, false);
+            if pai.is_riichi {
+                container(image(handle))
+                    .style(move |_: &_| container::Appearance {
+                        background: Some(Background::Color(color!(0, 0, 255))),
+                        ..Default::default()
+                    })
+                    .padding([0, 0, 4, 0])
+                    .into()
+            } else {
+                container(image(handle)).into()
+            }
+    };
+
+    // Manual chunking
+    let mut chunks: Vec<Vec<Element<'a, Message>>> = Vec::new();
+    let mut current_chunk = Vec::new();
+    
+    for pai in kawahai.iter().take(kawahai_len) {
+        current_chunk.push(create_elem(pai));
+        if current_chunk.len() == 6 {
+            if reverse_flow {
+                current_chunk.reverse();
+            }
+            chunks.push(current_chunk);
+            current_chunk = Vec::new();
+        }
+    }
+    if !current_chunk.is_empty() {
+        if reverse_flow {
+            current_chunk.reverse();
+        }
+        chunks.push(current_chunk);
+    }
+
+    if reverse_stack {
+        chunks.reverse();
+    }
+
     if is_vertical {
         // Vertical: Row of Columns
-        // Each Column has max 6 tiles (Top to Bottom)
-        // Columns added Left to Right
-        let mut cols = Row::new().spacing(0);
-        let mut current_col = column![].spacing(0);
-        let mut count = 0;
-
-        for pai in kawahai.iter().take(kawahai_len) {
-            let handle = image_cache.get(pai.pai_num as u32, angle, false);
-            let img: Element<'a, Message> = if pai.is_riichi {
-                container(image(handle))
-                    .style(move |_: &_| container::Appearance {
-                        background: Some(Background::Color(color!(0, 0, 255))),
-                        ..Default::default()
-                    })
-                    .padding([0, 0, 4, 0])
-                    .into()
-            } else {
-                container(image(handle)).into()
-            };
-
-            current_col = current_col.push(img);
-            count += 1;
-
-            if count % 6 == 0 {
-                cols = cols.push(current_col);
-                current_col = column![].spacing(0);
-            }
-        }
-        if count % 6 != 0 {
-            cols = cols.push(current_col);
-        }
-        cols.into()
+        let cols_vec: Vec<_> = chunks.into_iter()
+            .map(|items| column(items).spacing(0).into())
+            .collect();
+        
+        Row::with_children(cols_vec).spacing(0).into()
     } else {
-        // Horizontal: Column of Rows (Standard)
-        // Each Row has max 6 tiles (Left to Right)
-        // Rows added Top to Bottom
-        let mut rows = column![].spacing(0);
-        let mut current_row = Row::new().spacing(0);
-        let mut count = 0;
+        // Horizontal: Column of Rows
+        let rows_vec: Vec<_> = chunks.into_iter()
+            .map(|items| Row::with_children(items).spacing(0).into())
+            .collect();
 
-        for pai in kawahai.iter().take(kawahai_len) {
-            let handle = image_cache.get(pai.pai_num as u32, angle, false);
-            let img: Element<'a, Message> = if pai.is_riichi {
-                container(image(handle))
-                    .style(move |_: &_| container::Appearance {
-                        background: Some(Background::Color(color!(0, 0, 255))),
-                        ..Default::default()
-                    })
-                    .padding([0, 0, 4, 0])
-                    .into()
-            } else {
-                container(image(handle)).into()
-            };
-
-            current_row = current_row.push(img);
-            count += 1;
-
-            if count % 6 == 0 {
-                rows = rows.push(current_row);
-                current_row = Row::new().spacing(0);
-            }
-        }
-
-        if count % 6 != 0 {
-            rows = rows.push(current_row);
-        }
-
-        rows.into()
+        column(rows_vec).spacing(0).into()
     }
 }

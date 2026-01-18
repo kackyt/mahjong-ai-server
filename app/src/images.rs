@@ -20,8 +20,9 @@ impl ImageCache {
         // We need rotated variants.
         
         let prefix = match angle {
-            90 | 270 => "y",
+            90 => "ty",
             180 => "t",
+            270 => "y",
             _ => "",
         };
 
