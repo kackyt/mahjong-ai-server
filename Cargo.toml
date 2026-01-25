@@ -1,16 +1,11 @@
 [workspace]
-resolver = "2"
 
 members = [
-    "loadlibrary",
     "server",
-    "ai_bridge",
     "mahjong_core",
-    "game_lib",
-    "proc_macros",
-    "sample",
-    "app"
+    "ai_dll",
+    "ai_bridge",
+    "ai_wasm",
 ]
 
-# [profile.release]
-# debug = true
+resolver = "2"
