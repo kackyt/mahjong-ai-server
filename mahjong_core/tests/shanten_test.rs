@@ -25,7 +25,7 @@ fn parse_testcase(path: &Path) -> io::Result<Vec<(Vec<PaiT>, i32)>> {
                 id: 1,
                 is_tsumogiri: false,
                 is_riichi: false,
-                is_nakare: false
+                is_nakare: false,
             };
 
             pai_array.push(p);

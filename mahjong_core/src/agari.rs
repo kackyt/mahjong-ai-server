@@ -90,7 +90,13 @@ fn is_penchan(mentsu: &Mentsu) -> bool {
 }
 
 pub trait AgariBehavior {
-    fn get_agari(&self, who: usize, mentsu: &Vec<Mentsu>, fulo: &Vec<Mentsu>, is_ron: bool) -> AgariState;
+    fn get_agari(
+        &self,
+        who: usize,
+        mentsu: &Vec<Mentsu>,
+        fulo: &Vec<Mentsu>,
+        is_ron: bool,
+    ) -> AgariState;
     fn get_condition_yaku(&self, who: usize, state: &AgariState) -> Vec<(String, i32)>;
     fn get_dora_yaku(
         &self,
@@ -188,7 +194,13 @@ fn is_ippatsu(_state: &AgariState, player: &PlayerT) -> Option<(String, i32)> {
 }
 
 impl AgariBehavior for GameStateT {
-    fn get_agari(&self, who: usize, mentsu: &Vec<Mentsu>, fulo: &Vec<Mentsu>, is_ron: bool) -> AgariState {
+    fn get_agari(
+        &self,
+        who: usize,
+        mentsu: &Vec<Mentsu>,
+        fulo: &Vec<Mentsu>,
+        is_ron: bool,
+    ) -> AgariState {
         let mut agari = AgariState {
             fu: 20,
             menzen: true,
@@ -566,7 +578,7 @@ impl AgariBehavior for GameStateT {
                 let agari = self.get_agari(who, m, fulo, is_ron);
                 let mut yakus = self.get_condition_yaku(who, &agari);
                 yakus.extend(agari.get_yaku_list());
-                
+
                 // Enforce at least one Yaku requirement (excluding Dora)
                 if yakus.is_empty() {
                     return Agari::default();

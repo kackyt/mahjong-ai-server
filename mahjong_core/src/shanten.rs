@@ -389,10 +389,115 @@ impl PaiState {
         min_shanten
     }
 
+    pub fn get_chiitoitsu_shanten(&self) -> i32 {
+        let mut n_toitsu = 0;
+        let mut n_kind = 0;
+
+        for n in 0..9 {
+            if self.hai_count_m[n] >= 2 {
+                n_toitsu += 1;
+            }
+            if self.hai_count_m[n] >= 1 {
+                n_kind += 1;
+            }
+            if self.hai_count_p[n] >= 2 {
+                n_toitsu += 1;
+            }
+            if self.hai_count_p[n] >= 1 {
+                n_kind += 1;
+            }
+            if self.hai_count_s[n] >= 2 {
+                n_toitsu += 1;
+            }
+            if self.hai_count_s[n] >= 1 {
+                n_kind += 1;
+            }
+        }
+        for n in 0..7 {
+            if self.hai_count_z[n] >= 2 {
+                n_toitsu += 1;
+            }
+            if self.hai_count_z[n] >= 1 {
+                n_kind += 1;
+            }
+        }
+
+        let mut shanten = 6 - n_toitsu;
+        if n_kind < 7 {
+            shanten += 7 - n_kind;
+        }
+
+        shanten
+    }
+
+    pub fn get_kokushi_shanten(&self) -> i32 {
+        let mut n_yaochu = 0;
+        let mut has_pair = false;
+
+        let check = |count: i32| -> (i32, bool) {
+            if count >= 2 {
+                (1, true)
+            } else if count == 1 {
+                (1, false)
+            } else {
+                (0, false)
+            }
+        };
+
+        // Manzu 1, 9
+        let (c, p) = check(self.hai_count_m[0]);
+        n_yaochu += c;
+        if p {
+            has_pair = true;
+        }
+        let (c, p) = check(self.hai_count_m[8]);
+        n_yaochu += c;
+        if p {
+            has_pair = true;
+        }
+        // Pinzu 1, 9
+        let (c, p) = check(self.hai_count_p[0]);
+        n_yaochu += c;
+        if p {
+            has_pair = true;
+        }
+        let (c, p) = check(self.hai_count_p[8]);
+        n_yaochu += c;
+        if p {
+            has_pair = true;
+        }
+        // Souzu 1, 9
+        let (c, p) = check(self.hai_count_s[0]);
+        n_yaochu += c;
+        if p {
+            has_pair = true;
+        }
+        let (c, p) = check(self.hai_count_s[8]);
+        n_yaochu += c;
+        if p {
+            has_pair = true;
+        }
+        // Zihai 1-7
+        for n in 0..7 {
+            let (c, p) = check(self.hai_count_z[n]);
+            n_yaochu += c;
+            if p {
+                has_pair = true;
+            }
+        }
+
+        let mut shanten = 13 - n_yaochu;
+        if has_pair {
+            shanten -= 1;
+        }
+
+        shanten
+    }
+
     pub fn get_shanten(&mut self, n_fulo: usize) -> i32 {
         let mut min_shanten = self.get_shanten_case(false, n_fulo);
 
-        // 可能な雀頭を抜き取り、雀頭ありの場合のシャンテン数を計算する
+        // Standard form
         for n in 0..9 {
             if self.hai_count_m[n] >= 2 {
                 self.hai_count_m[n] -= 2;
@@ -410,7 +515,6 @@ impl PaiState {
                 self.hai_count_s[n] += 2;
             }
         }
-
         for n in 0..7 {
             if self.hai_count_z[n] >= 2 {
                 self.hai_count_z[n] -= 2;
@@ -419,8 +523,65 @@ impl PaiState {
             }
         }
 
+        // Chiitoitsu (only if menzen)
+        if n_fulo == 0 {
+            min_shanten = min_shanten.min(self.get_chiitoitsu_shanten());
+            min_shanten = min_shanten.min(self.get_kokushi_shanten());
+        }
+
         min_shanten
     }
+}
+
+pub fn all_of_chiitoitsu(pai_state: &PaiState) -> Vec<Vec<Mentsu>> {
+    let mut mentsu_list = Vec::new();
+    // Check if we have 7 pairs
+    let mut n_toitsu = 0;
+
+    // Check counts
+    // logic: iterate all, if >=2, add as pair
+    // Note: 4 cards = 2 pairs
+
+    let mut vector = Vec::new();
+
+    let mut add_pair = |suit: usize, num: usize, count: i32| {
+        let pairs = count / 2;
+        for _ in 0..pairs {
+            let base = match suit {
+                0 => num,
+                1 => num + 9,
+                2 => num + 18,
+                3 => num + 27,
+                _ => 0,
+            };
+            let m = Mentsu::new(
+                &[
+                    MentsuPai::new(base as u8, 0, MentsuFlag::FLAG_NONE),
+                    MentsuPai::new(base as u8, 0, MentsuFlag::FLAG_NONE),
+                    MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
+                    MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
+                ],
+                2,
+                MentsuType::TYPE_ATAMA,
+            );
+            vector.push(m);
+        }
+    };
+
+    for n in 0..9 {
+        add_pair(0, n, pai_state.hai_count_m[n]);
+        add_pair(1, n, pai_state.hai_count_p[n]);
+        add_pair(2, n, pai_state.hai_count_s[n]);
+    }
+    for n in 0..7 {
+        add_pair(3, n, pai_state.hai_count_z[n]);
+    }
+
+    if vector.len() == 7 {
+        mentsu_list.push(vector);
+    }
+
+    mentsu_list
 }
 
 impl PaiT {

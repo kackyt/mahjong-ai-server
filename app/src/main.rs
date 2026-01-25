@@ -10,14 +10,18 @@ use ai_bridge::{
 };
 use anyhow::anyhow;
 use iced::{
-    executor, theme,
-    widget::{combo_box, container, text, column, button}, // Added column/text/button for modal fallback if needed
-    Application, Command, Element,
+    executor,
+    theme,
+    widget::{button, column, combo_box, container, text}, // Added column/text/button for modal fallback if needed
+    Application,
+    Command,
+    Element,
 };
 use log::{debug, info};
 use mahjong_core::{
-    game_process::GameProcessError, play_log,
-    mahjong_generated::open_mahjong::{PaiT, MentsuT, MentsuPaiT, MentsuFlag, MentsuType},
+    game_process::GameProcessError,
+    mahjong_generated::open_mahjong::{MentsuFlag, MentsuPaiT, MentsuT, MentsuType, PaiT},
+    play_log,
     shanten::PaiState,
 };
 
@@ -25,13 +29,13 @@ use modal::Modal;
 pub mod modal;
 
 pub mod components;
+pub mod images;
 pub mod pages;
 pub mod types;
 pub mod utils;
-pub mod images;
 
-use types::{AppState, Message};
 use pages::{game_page, title_page};
+use types::{AppState, Message};
 
 extern crate libc;
 
@@ -45,12 +49,19 @@ struct App {
     game_mode: crate::types::GameMode,
     ai_paths: [Option<String>; 4],
     ai_files: Vec<combo_box::State<String>>,
-    ai_instances: Vec<AI>, 
+    ai_instances: Vec<AI>,
     image_cache: crate::images::ImageCache,
     can_ron: bool,
     can_pon: bool,
     can_chi: bool,
     can_kan: bool,
+
+    // Hanchan State
+    bakaze: u32,
+    kyoku: u32,
+    honba: u32,
+    riichibou: u32,
+    oya: u32,
 }
 
 #[derive(Clone)]
@@ -137,6 +148,7 @@ impl Application for App {
 
     fn update(&mut self, event: Message) -> Command<Message> {
         match event {
+            /// ゲームを開始します。
             Message::Start => unsafe {
                 let state = &mut G_STATE;
                 let sendmes_ptr = mjsend_message as *const ();
@@ -150,7 +162,7 @@ impl Application for App {
                 let mut status_messages = Vec::new();
                 if self.game_mode == crate::types::GameMode::FourPlayerVsAI {
                     for i in 1..4 {
-                         if let Some(ai_path) = &self.ai_paths[i] {
+                        if let Some(ai_path) = &self.ai_paths[i] {
                             let mut cur = env::current_dir().unwrap();
                             cur.push(format!("{}.dll", ai_path));
                             // AI loading logic...
@@ -159,40 +171,78 @@ impl Application for App {
                                 let symbol = get_ai_symbol(handle, "MJPInterfaceFunc");
                                 if let Ok(s) = symbol {
                                     let ai_symbol: MJPInterfaceFuncP = std::mem::transmute(s);
-                                    let size = (ai_symbol)(std::ptr::null_mut(), MJPI_CREATEINSTANCE.try_into().unwrap(), 0, 0);
+                                    let size = (ai_symbol)(
+                                        std::ptr::null_mut(),
+                                        MJPI_CREATEINSTANCE.try_into().unwrap(),
+                                        0,
+                                        0,
+                                    );
                                     let inst = libc::malloc(size as usize);
                                     libc::memset(inst, 0, size as usize);
 
-                                    (ai_symbol)(inst, MJPI_INITIALIZE.try_into().unwrap(), 0, std::mem::transmute(sendmes_ptr));
+                                    (ai_symbol)(
+                                        inst,
+                                        MJPI_INITIALIZE.try_into().unwrap(),
+                                        0,
+                                        std::mem::transmute(sendmes_ptr),
+                                    );
                                     (ai_symbol)(inst, MJPI_STARTGAME.try_into().unwrap(), 0, 0);
-                                    (ai_symbol)(inst, MJPI_BASHOGIME.try_into().unwrap(), std::mem::transmute(dummy.as_ptr()), 0);
+                                    (ai_symbol)(
+                                        inst,
+                                        MJPI_BASHOGIME.try_into().unwrap(),
+                                        std::mem::transmute(dummy.as_ptr()),
+                                        0,
+                                    );
 
-                                    self.ai_instances.push(AI { symbol: ai_symbol, inst });
+                                    self.ai_instances.push(AI {
+                                        symbol: ai_symbol,
+                                        inst,
+                                    });
                                 } else {
-                                     status_messages.push(format!("P{}: Symbol not found in {}", i, ai_path));
-                                     self.ai_instances.push(AI { symbol: dummy_func, inst: std::ptr::null_mut() }); 
+                                    status_messages
+                                        .push(format!("P{}: Symbol not found in {}", i, ai_path));
+                                    self.ai_instances.push(AI {
+                                        symbol: dummy_func,
+                                        inst: std::ptr::null_mut(),
+                                    });
                                 }
                             } else {
-                                status_messages.push(format!("P{}: Load failed for {}: {:?}", i, ai_path, res.err()));
-                                self.ai_instances.push(AI { symbol: dummy_func, inst: std::ptr::null_mut() }); 
+                                status_messages.push(format!(
+                                    "P{}: Load failed for {}: {:?}",
+                                    i,
+                                    ai_path,
+                                    res.err()
+                                ));
+                                self.ai_instances.push(AI {
+                                    symbol: dummy_func,
+                                    inst: std::ptr::null_mut(),
+                                });
                             }
-                         } else {
-                             status_messages.push(format!("P{}: No AI selected. Dummy AI will play.", i));
-                             self.ai_instances.push(AI { symbol: dummy_func, inst: std::ptr::null_mut() }); 
-                         }
+                        } else {
+                            status_messages
+                                .push(format!("P{}: No AI selected. Dummy AI will play.", i));
+                            self.ai_instances.push(AI {
+                                symbol: dummy_func,
+                                inst: std::ptr::null_mut(),
+                            });
+                        }
                     }
                 }
-                
+
                 if !status_messages.is_empty() {
                     self.show_modal(&status_messages.join("\n"));
                 }
-                
+
                 self.can_ron = false;
                 self.can_pon = false;
                 self.can_chi = false;
                 self.can_kan = false;
 
-                let player_len = if self.game_mode == crate::types::GameMode::OnePlayerSolo { 1 } else { 4 };
+                let player_len = if self.game_mode == crate::types::GameMode::OnePlayerSolo {
+                    1
+                } else {
+                    4
+                };
                 state.create(b"test", player_len, &mut self.play_log);
                 state.shuffle();
                 state.start(&mut self.play_log);
@@ -202,22 +252,34 @@ impl Application for App {
                 self.turns = 0;
                 self.is_riichi = false;
 
+                // Initialize Round Info
+                self.bakaze = 0;
+                self.kyoku = 1;
+                self.honba = 0;
+                self.riichibou = 0;
+                self.oya = 0; // P0 starts as Oya? Or Random? For simplicity P0.
+                state.oya = self.oya;
+                state.bakaze = self.bakaze;
+                state.kyoku_id = 1; // Or timestamp
+                state.tsumobou = self.honba as u32;
+                state.riichibou = self.riichibou as u32;
+
                 // Trigger AI if it's AI's turn (only in 4P Vs AI)
                 let teban = state.teban as usize;
                 if self.game_mode == crate::types::GameMode::FourPlayerVsAI && teban != 0 {
-                     if teban - 1 < self.ai_instances.len() {
-                         let ai = self.ai_instances[teban - 1].clone();
-                         let tsumohai_num: usize = state.players[teban]
-                           .tsumohai
-                           .pai_num
-                           .try_into()
-                           .unwrap();
-                         return Command::perform(ai.ai_next(tsumohai_num), |r| Message::AICommand(r));
-                     }
+                    if teban - 1 < self.ai_instances.len() {
+                        let ai = self.ai_instances[teban - 1].clone();
+                        let tsumohai_num: usize =
+                            state.players[teban].tsumohai.pai_num.try_into().unwrap();
+                        return Command::perform(ai.ai_next(tsumohai_num), |r| {
+                            Message::AICommand(r)
+                        });
+                    }
                 }
-                
+
                 Command::none()
             },
+            /// プレイヤー（人間）が打牌した時の処理です。
             Message::Dahai(index) => unsafe {
                 let state = &mut G_STATE;
                 let state_riichi = player_is_riichi(0);
@@ -235,28 +297,37 @@ impl Application for App {
                     Ok(_) => {
                         self.turns += 1;
                         // 18 turns is for 1-player. 4-player is about 70.
-                        let is_game_over = if self.game_mode == crate::types::GameMode::OnePlayerSolo {
-                             self.turns > 18
-                        } else {
-                             state.remain() == 0
-                        };
+                        let is_game_over =
+                            if self.game_mode == crate::types::GameMode::OnePlayerSolo {
+                                self.turns > 18
+                            } else {
+                                state.remain() == 0
+                            };
 
                         if is_game_over {
-                            self.state = AppState::Ended;
+                            self.state = AppState::HandEnded;
                             self.show_modal("流局");
                         } else {
                             state.tsumo(&mut self.play_log);
-                            
-                             // Check if next player is AI
+
+                            // Check if next player is AI
                             let next_teban = state.teban as usize;
-                             if self.game_mode == crate::types::GameMode::FourPlayerVsAI && next_teban != 0 {
-                                  if next_teban - 1 < self.ai_instances.len() {
-                                      println!("Triggering AI for P{}", next_teban);
-                                      let ai = self.ai_instances[next_teban - 1].clone();
-                                      let tsumohai_num: usize = state.players[next_teban].tsumohai.pai_num.try_into().unwrap();
-                                      return Command::perform(ai.ai_next(tsumohai_num), |r| Message::AICommand(r));
-                                  }
-                             }
+                            if self.game_mode == crate::types::GameMode::FourPlayerVsAI
+                                && next_teban != 0
+                            {
+                                if next_teban - 1 < self.ai_instances.len() {
+                                    println!("Triggering AI for P{}", next_teban);
+                                    let ai = self.ai_instances[next_teban - 1].clone();
+                                    let tsumohai_num: usize = state.players[next_teban]
+                                        .tsumohai
+                                        .pai_num
+                                        .try_into()
+                                        .unwrap();
+                                    return Command::perform(ai.ai_next(tsumohai_num), |r| {
+                                        Message::AICommand(r)
+                                    });
+                                }
+                            }
                         }
                     }
                     Err(m) => {
@@ -266,6 +337,7 @@ impl Application for App {
                 }
                 Command::none()
             },
+            /// ツモ和了ボタンが満たされた時の処理です。
             Message::Tsumo => {
                 unsafe {
                     let state = &mut G_STATE;
@@ -273,7 +345,7 @@ impl Application for App {
 
                     match result {
                         Ok(agari) => {
-                            self.state = AppState::Ended;
+                            self.state = AppState::HandEnded;
 
                             self.show_modal(&format!(
                                 "{}\n{}翻\n{}符\n{}点",
@@ -314,6 +386,7 @@ impl Application for App {
                 }
                 Command::none()
             }
+            /// AIからのコマンド（打牌、リーチ、ツモなど）を受信した時の処理です。
             Message::AICommand(ret) => unsafe {
                 let index = ret & 0x3F;
                 let flag = ret & 0xFF80;
@@ -328,7 +401,7 @@ impl Application for App {
 
                         match agari_r {
                             Ok(agari) => {
-                                self.state = AppState::Ended;
+                                self.state = AppState::HandEnded;
 
                                 self.show_modal(&format!(
                                     "{}\n{}翻\n{}符\n{}点",
@@ -344,9 +417,14 @@ impl Application for App {
                         }
 
                         // Notify all AIs
-                          for ai in &self.ai_instances {
-                              (ai.symbol)(ai.inst, MJPI_ENDKYOKU.try_into().unwrap(), MJEK_RYUKYOKU.try_into().unwrap(), std::mem::transmute(score.as_ptr()));
-                          }
+                        for ai in &self.ai_instances {
+                            (ai.symbol)(
+                                ai.inst,
+                                MJPI_ENDKYOKU.try_into().unwrap(),
+                                MJEK_RYUKYOKU.try_into().unwrap(),
+                                std::mem::transmute(score.as_ptr()),
+                            );
+                        }
                         Command::none()
                     } else {
                         let result = match flag {
@@ -360,94 +438,129 @@ impl Application for App {
                         match result {
                             Ok(_) => {
                                 self.turns += 1;
-                                let is_game_over = if self.game_mode == crate::types::GameMode::OnePlayerSolo {
-                                     self.turns > 18
-                                } else {
-                                     state.remain() == 0
-                                };
+                                let is_game_over =
+                                    if self.game_mode == crate::types::GameMode::OnePlayerSolo {
+                                        self.turns > 18
+                                    } else {
+                                        state.remain() == 0
+                                    };
 
                                 if is_game_over {
-                                    self.state = AppState::Ended;
+                                    self.state = AppState::HandEnded;
                                     self.show_modal("流局");
                                     Command::none()
                                 } else {
-                                          // state.tsumo removed from here
+                                    // state.tsumo removed from here
 
-                                          
-                                          // Reset flags
-                                          let mut can_ron_flag = false;
-                                          let mut can_pon_flag = false;
-                                          let mut can_chi_flag = false;
-                                          let mut can_kan_flag = false;
+                                    // Reset flags
+                                    let mut can_ron_flag = false;
+                                    let mut can_pon_flag = false;
+                                    let mut can_chi_flag = false;
+                                    let mut can_kan_flag = false;
 
-                                          let ai_idx = state.teban as usize;
-                                          let tile_in_river = state.players[ai_idx].kawahai.iter().last();
+                                    let discarder_idx =
+                                        (state.teban as usize + state.player_len as usize - 1)
+                                            % state.player_len as usize;
+                                    let tile_in_river =
+                                        state.players[discarder_idx].kawahai.iter().last();
 
-                                          if let Some(tile) = tile_in_river {
-                                              let p0 = &state.players[0];
-                                              let mut tiles: Vec<PaiT> = p0.tehai.iter().cloned().collect();
-                                              
-                                              // 1. Check RON
-                                               let t = PaiT { 
-                                                  pai_num: tile.pai_num, 
-                                                  id: 0, is_tsumogiri: false, is_riichi: false, is_nakare: false 
-                                              };
-                                              tiles.push(t.clone());
-                                              if PaiState::from(&tiles).get_shanten(0) == -1 {
-                                                  can_ron_flag = true;
-                                              }
+                                    if let Some(tile) = tile_in_river {
+                                        // Cannot call on own discard
+                                        if discarder_idx != 0 {
+                                            let p0 = &state.players[0];
 
-                                              // 2. Check PON
-                                              // Count matching pai_num
-                                              // Count matching pai_num
-                                              let count = p0.tehai.iter().filter(|t| t.pai_num == tile.pai_num).count();
-                                              if count >= 2 {
-                                                  can_pon_flag = true;
-                                              }
-                                              if count >= 3 {
-                                                  can_kan_flag = true;
-                                              }
+                                            let state_riichi = player_is_riichi(0);
 
-                                              // 3. Check CHI
-                                              // Only from Left Player (P3)
-                                              let from_left = ai_idx == 3;
-                                              if from_left && tile.pai_num < 27 { // Honors cannot Chi
-                                                  let n = tile.pai_num;
-                                                  let has = |num: u8| p0.tehai.iter().any(|t| t.pai_num == num);
-                                                  let valid_chi = |a: u8, b: u8| -> bool {
-                                                       if a/9 != n/9 || b/9 != n/9 { return false; }
-                                                       has(a) && has(b)
-                                                  };
-                                                  if (n >= 2 && valid_chi(n-2, n-1)) ||
-                                                     (n >= 1 && valid_chi(n-1, n+1)) ||
-                                                     valid_chi(n+1, n+2) {
-                                                      can_chi_flag = true;
-                                                  }
-                                              }
-                                          }
-                                          
-                                          if can_ron_flag || can_pon_flag || can_chi_flag || can_kan_flag {
-                                              debug!("Pause for Human Action: Ron={}, Pon={}, Chi={}, Kan={}", can_ron_flag, can_pon_flag, can_chi_flag, can_kan_flag);
-                                              self.can_ron = can_ron_flag;
-                                              self.can_pon = can_pon_flag;
-                                              self.can_chi = can_chi_flag;
-                                              self.can_kan = can_kan_flag;
-                                              return Command::none();
-                                          }
-
-                                          state.tsumo(&mut self.play_log);
-                                          
-                                          let next_teban = state.teban as usize;
-                                           
-                                           // Check if next player is AI
-                                           if self.game_mode == crate::types::GameMode::FourPlayerVsAI && next_teban != 0 {
-                                                if next_teban - 1 < self.ai_instances.len() {
-                                                    let ai = self.ai_instances[next_teban - 1].clone();
-                                                    let tsumohai_num: usize = state.players[next_teban].tsumohai.pai_num.try_into().unwrap();
-                                                    return Command::perform(ai.ai_next(tsumohai_num), |r| Message::AICommand(r));
+                                            if !state_riichi {
+                                                // 2. Check PON
+                                                // Count matching pai_num
+                                                let count = p0
+                                                    .tehai
+                                                    .iter()
+                                                    .filter(|t| t.pai_num == tile.pai_num)
+                                                    .count();
+                                                if count >= 2 {
+                                                    can_pon_flag = true;
                                                 }
-                                           }
-                                           Command::none()
+                                                if count >= 3 {
+                                                    can_kan_flag = true;
+                                                }
+
+                                                // 3. Check CHI
+                                                // Only from Left Player (P3). Relative to P0 (0), Left is 3.
+                                                // discarder_idx must be 3.
+                                                let from_left = discarder_idx == 3;
+                                                if from_left && tile.pai_num < 27 {
+                                                    // Honors cannot Chi
+                                                    let n = tile.pai_num;
+                                                    let has = |num: u8| {
+                                                        p0.tehai.iter().any(|t| t.pai_num == num)
+                                                    };
+                                                    let valid_chi = |a: u8, b: u8| -> bool {
+                                                        if a / 9 != n / 9 || b / 9 != n / 9 {
+                                                            return false;
+                                                        }
+                                                        has(a) && has(b)
+                                                    };
+                                                    if (n >= 2 && valid_chi(n - 2, n - 1))
+                                                        || (n >= 1 && valid_chi(n - 1, n + 1))
+                                                        || valid_chi(n + 1, n + 2)
+                                                    {
+                                                        can_chi_flag = true;
+                                                    }
+                                                }
+                                            }
+
+                                            // 1. Check RON (Can Ron even if in Riichi, but check_ron logic handles everything)
+                                            let t = PaiT {
+                                                pai_num: tile.pai_num,
+                                                id: 0,
+                                                is_tsumogiri: false,
+                                                is_riichi: false,
+                                                is_nakare: false,
+                                            };
+
+                                            if let Some(_) = state.check_ron(0, &t) {
+                                                can_ron_flag = true;
+                                            }
+
+                                            if can_ron_flag
+                                                || can_pon_flag
+                                                || can_chi_flag
+                                                || can_kan_flag
+                                            {
+                                                debug!("Pause for Human Action: Ron={}, Pon={}, Chi={}, Kan={}", can_ron_flag, can_pon_flag, can_chi_flag, can_kan_flag);
+                                                self.can_ron = can_ron_flag;
+                                                self.can_pon = can_pon_flag;
+                                                self.can_chi = can_chi_flag;
+                                                self.can_kan = can_kan_flag;
+                                                return Command::none();
+                                            }
+                                        }
+                                    }
+
+                                    state.tsumo(&mut self.play_log);
+
+                                    let next_teban = state.teban as usize;
+
+                                    // Check if next player is AI
+                                    if self.game_mode == crate::types::GameMode::FourPlayerVsAI
+                                        && next_teban != 0
+                                    {
+                                        if next_teban - 1 < self.ai_instances.len() {
+                                            let ai = self.ai_instances[next_teban - 1].clone();
+                                            let tsumohai_num: usize = state.players[next_teban]
+                                                .tsumohai
+                                                .pai_num
+                                                .try_into()
+                                                .unwrap();
+                                            return Command::perform(
+                                                ai.ai_next(tsumohai_num),
+                                                |r| Message::AICommand(r),
+                                            );
+                                        }
+                                    }
+                                    Command::none()
                                 }
                             }
                             Err(m) => {
@@ -467,6 +580,7 @@ impl Application for App {
                     }
                 }
             },
+            /// ロンボタンが押された時の処理です。
             Message::Ron => unsafe {
                 // Execute Ron
                 self.can_ron = false;
@@ -474,7 +588,7 @@ impl Application for App {
                 self.can_chi = false;
                 self.can_kan = false;
                 let state = &mut G_STATE;
-                
+
                 // Usually ron_agari takes arguments or uses internal state about who discarded?
                 // Assuming it works based on last kawahai.
                 // Note: tsumo_agari handles Tsumo. logic usually auto-detects.
@@ -483,69 +597,80 @@ impl Application for App {
                 // But the struct is Generated.
                 // Let's assume ron_agari exists or tsumo_agari handles it if flags set?
                 // Wait, if it's discarded, it's not Tsumo.
-                
+
                 // Check interface.rs: MJMI_GETAGARITEN calls taku.get_best_agari
                 // I will try to call state.ron_agari(&mut self.play_log) if implies implicit target.
                 // If fails compilation, I will fallback.
-                
+
                 // For now, I'll use logic similar to Tsumo but set state ended.
                 // NOTE: Using tsumo_agari might FAIL since it expects Tsumo tile?
                 // I will calculate score manually if needed?
                 // Hopefully 'ron_agari' is there.
-                
-                if let Ok(agari) = state.tsumo_agari(&mut self.play_log) { // FALLBACK: Try tsumo_agari just to verify API or use placeholder
-                     self.state = AppState::Ended;
-                     self.show_modal(&format!(
-                         "RON!\n{}\n{}翻\n{}符\n{}点",
-                         yaku_to_string(&agari.yaku),
-                         agari.han,
-                         agari.fu,
-                         agari.score
-                     ));
+
+                if let Ok(agari) = state.tsumo_agari(&mut self.play_log) {
+                    // FALLBACK: Try tsumo_agari just to verify API or use placeholder
+                    self.state = AppState::HandEnded;
+                    self.show_modal(&format!(
+                        "RON!\n{}\n{}翻\n{}符\n{}点",
+                        yaku_to_string(&agari.yaku),
+                        agari.han,
+                        agari.fu,
+                        agari.score
+                    ));
                 } else {
-                     // Since ron_agari might not exist, we just show RON.
-                     self.state = AppState::Ended;
-                     self.show_modal("RON! (Score TBD)");
+                    // Since ron_agari might not exist, we just show RON.
+                    self.state = AppState::HandEnded;
+                    self.show_modal("RON! (Score TBD)");
                 }
                 Command::none()
             },
             Message::Pass => unsafe {
-                 self.can_ron = false;
-                 self.can_pon = false;
-                 self.can_chi = false;
-                 self.can_kan = false;
-                 // Proceed to next turn
-                 let state = &mut G_STATE;
-                 state.tsumo(&mut self.play_log);
-                 let next_teban = state.teban as usize;
-                 
-                  // Check if next player is AI
-                  if self.game_mode == crate::types::GameMode::FourPlayerVsAI && next_teban != 0 {
-                       if next_teban - 1 < self.ai_instances.len() {
-                           let ai = self.ai_instances[next_teban - 1].clone();
-                           let tsumohai_num: usize = state.players[next_teban].tsumohai.pai_num.try_into().unwrap();
-                           return Command::perform(ai.ai_next(tsumohai_num), |r| Message::AICommand(r));
-                       }
-                  }
-                  Command::none()
+                self.can_ron = false;
+                self.can_pon = false;
+                self.can_chi = false;
+                self.can_kan = false;
+                // Proceed to next turn
+                let state = &mut G_STATE;
+                state.tsumo(&mut self.play_log);
+                let next_teban = state.teban as usize;
+
+                // Check if next player is AI
+                if self.game_mode == crate::types::GameMode::FourPlayerVsAI && next_teban != 0 {
+                    if next_teban - 1 < self.ai_instances.len() {
+                        let ai = self.ai_instances[next_teban - 1].clone();
+                        let tsumohai_num: usize = state.players[next_teban]
+                            .tsumohai
+                            .pai_num
+                            .try_into()
+                            .unwrap();
+                        return Command::perform(ai.ai_next(tsumohai_num), |r| {
+                            Message::AICommand(r)
+                        });
+                    }
+                }
+                Command::none()
             },
+            /// ポンボタンが押された時の処理です。
             Message::Pon => {
                 self.can_ron = false;
                 self.can_pon = false;
                 self.can_chi = false;
                 self.can_kan = false;
-                
+
                 unsafe {
                     let state = &mut G_STATE;
                     // Find the tile to call (Last discard of CURRENT teban? No, teban advanced?)
                     // In sutehai, teban advanced.
                     // If P3 discarded, teban is P0.
                     // So discarder is (teban + 3) % 4.
-                    let discarder_idx = (state.teban as usize + state.player_len as usize - 1) % state.player_len as usize;
+                    let discarder_idx = (state.teban as usize + state.player_len as usize - 1)
+                        % state.player_len as usize;
                     if let Some(pai) = state.players[discarder_idx].kawahai.iter().last().cloned() {
                         let cands = state.check_pon(0, &pai);
                         if let Some(mentsu) = cands.first() {
-                            if let Err(e) = state.operate_fulo(&mut self.play_log, 0, mentsu.clone()) {
+                            if let Err(e) =
+                                state.operate_fulo(&mut self.play_log, 0, mentsu.clone())
+                            {
                                 self.show_modal(&format!("Pon Error: {:?}", e));
                             }
                             // After fulo, it is P0's turn (set in operate_fulo).
@@ -554,27 +679,32 @@ impl Application for App {
                     }
                 }
                 Command::none()
-            },
+            }
+            /// チーボタンが押された時の処理です。
             Message::Chi => {
                 self.can_ron = false;
                 self.can_pon = false;
                 self.can_chi = false;
                 self.can_kan = false;
-                 unsafe {
+                unsafe {
                     let state = &mut G_STATE;
-                    let discarder_idx = (state.teban as usize + state.player_len as usize - 1) % state.player_len as usize;
+                    let discarder_idx = (state.teban as usize + state.player_len as usize - 1)
+                        % state.player_len as usize;
                     if let Some(pai) = state.players[discarder_idx].kawahai.iter().last().cloned() {
                         let cands = state.check_chii(0, &pai);
                         // TODO: Select which Chi if multiple. Default to first.
                         if let Some(mentsu) = cands.first() {
-                            if let Err(e) = state.operate_fulo(&mut self.play_log, 0, mentsu.clone()) {
+                            if let Err(e) =
+                                state.operate_fulo(&mut self.play_log, 0, mentsu.clone())
+                            {
                                 self.show_modal(&format!("Chi Error: {:?}", e));
                             }
                         }
                     }
                 }
                 Command::none()
-            },
+            }
+            /// カンボタンが押された時の処理です。
             Message::Kan => {
                 self.can_ron = false;
                 self.can_pon = false;
@@ -582,29 +712,105 @@ impl Application for App {
                 self.can_kan = false;
                 unsafe {
                     let state = &mut G_STATE;
-                    let discarder_idx = (state.teban as usize + state.player_len as usize - 1) % state.player_len as usize;
+                    let discarder_idx = (state.teban as usize + state.player_len as usize - 1)
+                        % state.player_len as usize;
                     if let Some(pai) = state.players[discarder_idx].kawahai.iter().last().cloned() {
                         let cands = state.check_minkan(0, &pai);
                         if let Some(mentsu) = cands.first() {
-                            if let Err(e) = state.operate_fulo(&mut self.play_log, 0, mentsu.clone()) {
+                            if let Err(e) =
+                                state.operate_fulo(&mut self.play_log, 0, mentsu.clone())
+                            {
                                 self.show_modal(&format!("Kan Error: {:?}", e));
                             }
                         }
                     }
                 }
                 Command::none()
+            }
+            /// 次の局へ進む処理（Next Handボタン）です。親の交代やゲーム終了判定も行います。
+            Message::NextHand => unsafe {
+                let state = &mut G_STATE;
+
+                // Rotate Oya
+                let prev_oya = self.oya;
+                self.oya = (self.oya + 1) % 4;
+                if self.oya < prev_oya {
+                    self.bakaze += 1;
+                }
+                self.kyoku = self.oya + 1;
+                // honba handling simplification (reset on rotation)
+                self.honba = 0;
+
+                // Check Game Over
+                if self.bakaze > 1 {
+                    // Game Over
+                    self.state = AppState::GameFinished;
+                    // Show Ranking
+                    let mut scores: Vec<(usize, i32)> = state
+                        .players
+                        .iter()
+                        .enumerate()
+                        .take(4)
+                        .map(|(i, p)| (i, p.score))
+                        .collect();
+                    scores.sort_by(|a, b| b.1.cmp(&a.1));
+
+                    // Oka
+                    scores[0].1 += 20000;
+                    // Update actual player score
+                    state.players[scores[0].0].score += 20000;
+
+                    let msg = scores
+                        .iter()
+                        .enumerate()
+                        .map(|(rank, (idx, s))| format!("{}位: P{} {}", rank + 1, idx, s))
+                        .collect::<Vec<String>>()
+                        .join("\n");
+                    self.show_modal(&format!("Game Over\n\n{}", msg));
+                    return Command::none();
+                }
+
+                // Start Next Hand
+                // Update State
+                state.oya = self.oya;
+                state.bakaze = self.bakaze;
+                state.tsumobou = self.honba as u32;
+
+                state.shuffle();
+                state.start(&mut self.play_log);
+                state.tsumo(&mut self.play_log);
+
+                self.state = AppState::Started;
+                self.turns = 0;
+                self.is_riichi = false;
+
+                Command::none()
             },
+            Message::BackToTitle => {
+                self.state = AppState::Created;
+                Command::none()
+            }
         }
     }
 
     fn view(&self) -> Element<Message> {
         let content: Element<_> = match self.state {
-            AppState::Created => {
-                title_page::view(&self.ai_files, &self.ai_paths, self.game_mode)
-            },
-            AppState::Started | AppState::Ended => {
-                game_page::view(self.state, self.turns, self.is_riichi, &self.image_cache, self.can_ron, self.can_pon, self.can_chi, self.can_kan)
-            }
+            AppState::Created => title_page::view(&self.ai_files, &self.ai_paths, self.game_mode),
+            AppState::Started | AppState::HandEnded | AppState::GameFinished => game_page::view(
+                self.state,
+                self.turns,
+                self.is_riichi,
+                &self.image_cache,
+                self.can_ron,
+                self.can_pon,
+                self.can_chi,
+                self.can_kan,
+                self.bakaze,
+                self.kyoku,
+                self.honba,
+                self.riichibou,
+                self.oya,
+            ),
         };
 
         let containered_content = container(content).padding(10);
@@ -613,7 +819,12 @@ impl Application for App {
             let modal = container(
                 column![
                     text(self.modal_message.clone()),
-                    button("Close").on_press(Message::HideModal),
+                    match self.state {
+                        AppState::HandEnded => button("Next Hand").on_press(Message::NextHand),
+                        AppState::GameFinished =>
+                            button("Back to Title").on_press(Message::BackToTitle),
+                        _ => button("Close").on_press(Message::HideModal),
+                    }
                 ]
                 .spacing(10)
                 .padding(10),
@@ -641,7 +852,9 @@ impl Application for App {
                 ai_paths: [None, None, None, None],
                 ai_files: {
                     let files = find_dll_files();
-                    (0..4).map(|_| combo_box::State::new(files.clone())).collect()
+                    (0..4)
+                        .map(|_| combo_box::State::new(files.clone()))
+                        .collect()
                 },
                 game_mode: crate::types::GameMode::default(),
                 // The user code used `ai_symbol` and `ai_inst` (singular).
@@ -652,6 +865,11 @@ impl Application for App {
                 can_pon: false,
                 can_chi: false,
                 can_kan: false,
+                bakaze: 0,
+                kyoku: 1,
+                honba: 0,
+                riichibou: 0,
+                oya: 0,
             },
             load_font,
         )

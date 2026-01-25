@@ -18,7 +18,7 @@ impl ImageCache {
         // For now, let's assume standard names or handle 'red' suffix if passed.
         // The original utils::painum2path handled standard lookup.
         // We need rotated variants.
-        
+
         let prefix = match angle {
             90 => "ty",
             180 => "t",

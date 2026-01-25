@@ -1,6 +1,6 @@
 use mahjong_core::{
     fbs_utils::TakuControl,
-    mahjong_generated::open_mahjong::{TakuT, PaiT},
+    mahjong_generated::open_mahjong::{PaiT, TakuT},
 };
 
 #[test]
@@ -39,11 +39,9 @@ fn taku_get_range_test() {
 
     assert_eq!(r2.unwrap().len(), 26);
 
-
     let r3 = taku.get_range(34..130);
 
     assert!(r3.is_ok(), "成功");
 
     assert_eq!(r3.unwrap().len(), 96);
 }
-

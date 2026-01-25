@@ -1,8 +1,33 @@
 use mahjong_core::{mahjong_generated::open_mahjong::PaiT, shanten::PaiState};
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
+#[derive(Deserialize)]
+struct GameState {
+    tehai: Vec<u8>,
+}
+
+#[derive(Serialize)]
+struct AIResult {
+    discard: usize,
+}
+
 #[wasm_bindgen]
-pub fn get_discard(tehai: &[u8]) -> usize {
+pub fn get_discard(json_state: String) -> String {
+    let state: GameState = match serde_json::from_str(&json_state) {
+        Ok(s) => s,
+        Err(_) => return "{}".to_string(),
+    };
+
+    let best_discard = calculate_discard(&state.tehai);
+
+    let result = AIResult {
+        discard: best_discard,
+    };
+    serde_json::to_string(&result).unwrap_or("{}".to_string())
+}
+
+fn calculate_discard(tehai: &[u8]) -> usize {
     let mut min_shanten = 999;
     let mut best_discard = 0;
 

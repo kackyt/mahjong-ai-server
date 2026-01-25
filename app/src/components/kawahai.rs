@@ -27,36 +27,36 @@ pub fn view<'a>(
 
     // Helper to create element
     let create_elem = |pai: &PaiT| {
-            let handle = image_cache.get(pai.pai_num as u32, angle, false);
-            
-            // Scale tiles: 
-            // 0/180 (Vertical/Portrait): Height ~38px
-            // 90/270 (Horizontal/Landscape): Height ~28px
-            // (Assuming approx 3:4 aspect ratio)
-            let img_height = match angle {
-                90 | 270 => 29.0,
-                _ => 38.0,
-            };
+        let handle = image_cache.get(pai.pai_num as u32, angle, false);
 
-            let img = image(handle).height(Length::Fixed(img_height));
+        // Scale tiles:
+        // 0/180 (Vertical/Portrait): Height ~38px
+        // 90/270 (Horizontal/Landscape): Height ~28px
+        // (Assuming approx 3:4 aspect ratio)
+        let img_height = match angle {
+            90 | 270 => 29.0,
+            _ => 38.0,
+        };
 
-            if pai.is_riichi {
-                container(img)
-                    .style(move |_: &_| container::Appearance {
-                        background: Some(Background::Color(color!(0, 0, 255))),
-                        ..Default::default()
-                    })
-                    .padding([0, 0, 4, 0])
-                    .into()
-            } else {
-                container(img).into()
-            }
+        let img = image(handle).height(Length::Fixed(img_height));
+
+        if pai.is_riichi {
+            container(img)
+                .style(move |_: &_| container::Appearance {
+                    background: Some(Background::Color(color!(0, 0, 255))),
+                    ..Default::default()
+                })
+                .padding([0, 0, 4, 0])
+                .into()
+        } else {
+            container(img).into()
+        }
     };
 
     // Manual chunking
     let mut chunks: Vec<Vec<Element<'a, Message>>> = Vec::new();
     let mut current_chunk = Vec::new();
-    
+
     for pai in kawahai.iter().take(kawahai_len) {
         current_chunk.push(create_elem(pai));
         if current_chunk.len() == 6 {
@@ -80,14 +80,16 @@ pub fn view<'a>(
 
     if is_vertical {
         // Vertical: Row of Columns
-        let cols_vec: Vec<_> = chunks.into_iter()
+        let cols_vec: Vec<_> = chunks
+            .into_iter()
             .map(|items| column(items).spacing(0).into())
             .collect();
-        
+
         Row::with_children(cols_vec).spacing(0).into()
     } else {
         // Horizontal: Column of Rows
-        let rows_vec: Vec<_> = chunks.into_iter()
+        let rows_vec: Vec<_> = chunks
+            .into_iter()
             .map(|items| Row::with_children(items).spacing(0).into())
             .collect();
 
