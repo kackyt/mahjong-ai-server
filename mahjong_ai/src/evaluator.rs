@@ -1,0 +1,143 @@
+use crate::score::{chiitoi_point, koutsu_point, shuntsu_point, SearchContext};
+use crate::state::AIStateWrapper;
+use anyhow::Result;
+use itertools::Itertools;
+use mahjong_core::mahjong_generated::open_mahjong::GameStateT;
+use mahjong_core::shanten::PaiState;
+use rayon::prelude::*;
+
+fn calculate_nokori_sum(wrapper: &AIStateWrapper) -> f64 {
+    wrapper.remain_counts.iter().map(|&c| c as f64).sum()
+}
+
+pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
+    let wrapper = AIStateWrapper::new(game_state);
+    let myself = &game_state.players[game_state.teban as usize];
+
+    // Collect candidates (unique pai_num)
+    let mut candidates: Vec<usize> = myself
+        .tehai
+        .iter()
+        .take(myself.tehai_len as usize)
+        .map(|p| p.pai_num as usize)
+        .filter(|&p| p < 34)
+        .collect();
+
+    if myself.tsumohai.pai_num < 34 {
+        candidates.push(myself.tsumohai.pai_num as usize);
+    }
+
+    let unique_candidates: Vec<usize> = candidates.into_iter().unique().collect();
+    let nokori_sum = calculate_nokori_sum(&wrapper);
+
+    let results: Vec<(usize, f64)> = unique_candidates
+        .par_iter()
+        .map(|&pai| {
+            // Create hypothetical hand counts (remove 1 'pai')
+            let mut hand_counts = wrapper.my_tehai_counts;
+            if hand_counts[pai] > 0 {
+                hand_counts[pai] -= 1;
+            } else {
+                return (pai, -1.0);
+            }
+
+            // Calculate shanten for this state
+            let mut pstate = PaiState::default();
+            for i in 0..34 {
+                 match i {
+                    0..=8 => pstate.hai_count_m[i] = hand_counts[i] as i32,
+                    9..=17 => pstate.hai_count_p[i - 9] = hand_counts[i] as i32,
+                    18..=26 => pstate.hai_count_s[i - 18] = hand_counts[i] as i32,
+                    27..=33 => pstate.hai_count_z[i - 27] = hand_counts[i] as i32,
+                    _ => {}
+                }
+            }
+
+            // Access n_naki safely inside closure
+            let n_naki = wrapper.game_state.players[wrapper.game_state.teban as usize].mentsu_len as i32;
+            let shanten = pstate.get_shanten(n_naki as usize);
+
+            let ctx = SearchContext {
+                wrapper: &wrapper,
+                shanten_base: shanten,
+                nokori_sum,
+                hand_counts,
+            };
+
+            let mut total_score = 0.0;
+
+            // 1. Standard Hand Search
+            let needed = 4 - n_naki;
+            if needed >= 0 {
+                for k in 0..=needed {
+                    let s = needed - k;
+                    let mut current_counts = [0u8; 34];
+                    let mut current_mentsu = Vec::new();
+
+                    let score = if k > 0 {
+                        koutsu_point(&ctx, &mut current_counts, &mut current_mentsu, k, s, 0, 0)
+                    } else {
+                        shuntsu_point(&ctx, &mut current_counts, &mut current_mentsu, 0, s, 0, 0)
+                    };
+                    total_score += score;
+                }
+            }
+
+            // 2. Chiitoitsu
+            if n_naki == 0 {
+                let mut current_counts = [0u8; 34];
+                total_score += chiitoi_point(&ctx, &mut current_counts, 0, 0);
+            }
+
+            (pai, total_score)
+        })
+        .collect();
+
+    results
+        .into_iter()
+        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .ok_or_else(|| anyhow::anyhow!("No results"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mahjong_core::mahjong_generated::open_mahjong::{PaiT, PlayerT};
+
+    #[test]
+    fn test_eval_sutehai_basic() {
+        let mut game_state = GameStateT::default();
+        game_state.players = [PlayerT::default(), PlayerT::default(), PlayerT::default(), PlayerT::default()];
+        game_state.teban = 0;
+
+        let mut player = &mut game_state.players[0];
+        // Give 14 tiles (1m, 2m, 3m, 4m, 5m, 6m, 1p, 2p, 3p, 1s, 2s, 3s, 1z, 2z)
+        // 13 in tehai, 1 in tsumo
+        let tiles = vec![0, 1, 2, 3, 4, 5, 9, 10, 11, 18, 19, 20, 27];
+        for (i, t) in tiles.iter().enumerate() {
+            player.tehai[i] = PaiT {
+                pai_num: *t as u8,
+                id: 0,
+                is_tsumogiri: false,
+                is_riichi: false,
+                is_nakare: false,
+            };
+        }
+        player.tehai_len = tiles.len() as u32;
+
+        player.tsumohai = PaiT {
+            pai_num: 28, // 2z
+            id: 0,
+            is_tsumogiri: false,
+            is_riichi: false,
+            is_nakare: false,
+        };
+
+        let result = eval_sutehai(&game_state);
+        assert!(result.is_ok());
+        let (pai, score) = result.unwrap();
+        println!("Best discard: {}, Score: {}", pai, score);
+
+        assert!(pai == 27 || pai == 28);
+    }
+}

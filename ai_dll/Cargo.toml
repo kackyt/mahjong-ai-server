@@ -12,3 +12,6 @@ proc-macro = true
 [dependencies]
 libc = "0.2.140"
 proc_macros = { path = "../proc_macros" }
+mahjong_core = { path = "../mahjong_core" }
+mahjong_ai = { path = "../mahjong_ai" }
+ai_bridge = { path = "../ai_bridge" }

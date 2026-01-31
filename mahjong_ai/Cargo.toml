@@ -1,0 +1,10 @@
+[package]
+name = "mahjong_ai"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mahjong_core = { path = "../mahjong_core" }
+anyhow = "1.0"
+itertools = "0.12"
+rayon = "1.8"

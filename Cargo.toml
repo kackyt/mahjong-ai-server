@@ -5,7 +5,7 @@ members = [
     "mahjong_core",
     "ai_dll",
     "ai_bridge",
-    "ai_wasm",
+    "ai_wasm", "mahjong_ai",
 ]
 
 resolver = "2"
