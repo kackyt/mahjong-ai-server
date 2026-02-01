@@ -1,3 +1,4 @@
+use crate::strategy::mj0::mj0_simulate;
 use mahjong_core::mahjong_generated::open_mahjong::{GameStateT};
 
 pub struct AIStateWrapper<'a> {
@@ -5,10 +6,15 @@ pub struct AIStateWrapper<'a> {
     pub visible_counts: [u8; 34],
     pub remain_counts: [u8; 34],
     pub my_tehai_counts: [u8; 34],
+    pub kikenhai: [f64; 34],
+    pub nokorihai: [f64; 34],
 }
 
 impl<'a> AIStateWrapper<'a> {
     pub fn new(game_state: &'a GameStateT) -> Self {
+        // Run MJ0 Simulation
+        let (nokorihai, kikenhai, _, _, _) = mj0_simulate(game_state);
+
         let mut visible_counts = [0; 34];
         let mut my_tehai_counts = [0; 34];
 
@@ -22,13 +28,12 @@ impl<'a> AIStateWrapper<'a> {
             }
         }
 
-        // Count tsumohai if valid
         if myself.tsumohai.pai_num < 34 {
              visible_counts[myself.tsumohai.pai_num as usize] += 1;
              my_tehai_counts[myself.tsumohai.pai_num as usize] += 1;
         }
 
-        // 2. Count discards (kawahai) of all players
+        // 2. Count discards (kawahai)
         for player in &game_state.players {
             for i in 0..player.kawahai_len as usize {
                 let pai = &player.kawahai[i];
@@ -38,18 +43,10 @@ impl<'a> AIStateWrapper<'a> {
             }
         }
 
-        // 3. Count melds (mentsu) of all players
+        // 3. Melds
         for player in &game_state.players {
             for i in 0..player.mentsu_len as usize {
                 let mentsu = &player.mentsu[i];
-                // MentsuT has pai_list which is [MentsuPaiT; 4]
-                // We assume valid tiles are those with pai_num < 34 (and maybe valid flag/id?)
-                // Usually we just count valid pai_num.
-                // But pai_list has fixed size 4.
-                // Mentsu len is in mentsu.pai_len? No, MentsuT has `pai_len`.
-                // Actually MentsuT has `pai_len: u32`.
-                // So we iterate up to pai_len.
-
                 for j in 0..mentsu.pai_len as usize {
                     let p = &mentsu.pai_list[j];
                     if p.pai_num < 34 {
@@ -60,8 +57,6 @@ impl<'a> AIStateWrapper<'a> {
         }
 
         // 4. Doras
-        // Dora indicators are in taku.n5
-        // We use dora_len to know how many.
         for i in 0..game_state.dora_len as usize {
             let dora = &game_state.taku.n5[i];
             if dora.pai_num < 34 {
@@ -71,6 +66,24 @@ impl<'a> AIStateWrapper<'a> {
 
         let mut remain_counts = [0; 34];
         for i in 0..34 {
+            // MJ0 returns estimated remaining count in `nokorihai`.
+            // Should we use MJ0's estimate or exact visibility?
+            // `remain_counts` in score logic is usually (4 - visible).
+            // But MJ0 estimation provides "Tiles not held by opponents and not in dead wall".
+            // Actually MJ0 `nokorihai` is `average(wall_counts)`.
+            // So it includes tiles in the wall.
+            // My score logic (shuntsu_point etc) iterates:
+            // "probability *= (avail_in_wall) / rest"
+            // So we need "Expected number of tile i in wall".
+            // `nokorihai[i]` IS exactly that!
+
+            // So we can use `nokorihai` (rounded or as f64).
+            // My previous code used `remain_counts` (u8) and cast to f64.
+            // I should update `remain_counts` to use MJ0 if possible, or provide f64 accessor.
+            // But `AIStateWrapper` struct has `remain_counts: [u8; 34]`.
+            // I will keep `remain_counts` as (4 - visible) for strict checks,
+            // but add `nokorihai` array for probability calc.
+
             if visible_counts[i] > 4 {
                 remain_counts[i] = 0;
             } else {
@@ -83,6 +96,8 @@ impl<'a> AIStateWrapper<'a> {
             visible_counts,
             remain_counts,
             my_tehai_counts,
+            kikenhai,
+            nokorihai,
         }
     }
 

@@ -61,14 +61,27 @@ pub fn calc_machi_coef(
                 furiten = true;
             }
 
+            // Use MJ0 estimated remaining count
+            let avail_in_wall = ctx.wrapper.nokorihai[i]; // Estimated average in wall
+
+            // We used some from wall in hypothetical hand construction?
+            // current_counts tracks total usage.
+            // hand_counts tracks what we have.
+            // used_from_wall = current_counts - hand_counts.
+
+            // But MJ0 nokorihai is "Current expectation".
+            // It already accounts for "What we see" (removed from wall).
+            // But it doesn't account for "What we hypothetically used in THIS thread".
+            // So we subtract hypothetical usage.
+
             let used_from_wall = if temp_counts[i] > ctx.hand_counts[i] {
                 temp_counts[i] - ctx.hand_counts[i]
             } else { 0 };
 
-            let left = ctx.wrapper.remain_counts[i] as i32 - used_from_wall as i32;
+            let left = avail_in_wall - (used_from_wall as f64);
 
-            if left > 0 {
-                 num += left as f64;
+            if left > 0.0 {
+                 num += left;
             }
         }
 
@@ -116,11 +129,29 @@ pub fn calc_score(
         for i in 0..34 {
             if current_counts[i] > ctx.hand_counts[i] {
                 let needed = (current_counts[i] - ctx.hand_counts[i]) as i32;
-                let avail_in_wall = ctx.wrapper.remain_counts[i] as i32;
+                // Use MJ0 nokorihai for probability check?
+                // nokorihai is float.
+                // Probability of drawing `needed` tiles.
+                // MJ0 gives expected count.
+                // We treat expected count as "Available".
 
-                if needed > avail_in_wall {
-                    possible = false;
-                    break;
+                let avail_in_wall = ctx.wrapper.nokorihai[i];
+
+                if (needed as f64) > avail_in_wall {
+                    // Soft failure? Or hard?
+                    // If expected count < needed, probability drops drastically.
+                    // But assume if > 0.5 it's possible?
+                    // Let's use it as probability weight.
+                    // Or keep using strict remain_counts for strict possibility?
+                    // MJ0 is estimation. remain_counts is (4 - visible).
+                    // Logic:
+                    // If (4 - visible) < needed, IMPOSSIBLE.
+                    // If (4 - visible) >= needed, use MJ0 probability.
+
+                    if (needed as u8) > ctx.wrapper.remain_counts[i] {
+                        possible = false;
+                        break;
+                    }
                 }
 
                 let dist = paidistance(&ctx.hand_counts, i);
@@ -128,7 +159,8 @@ pub fn calc_score(
                 let kind_c = get_kind_coef(ctx.wrapper.game_state, i);
 
                 for _ in 0..needed {
-                    probability *= (avail_in_wall as f64) / rest;
+                    // Use MJ0 nokorihai for probability
+                    probability *= (avail_in_wall) / rest;
                     probability *= dist_c;
                     probability *= kind_c;
                     rest -= 1.0;
@@ -370,15 +402,15 @@ pub fn chiitoi_point(
         for i in 0..34 {
              if current_counts[i] > ctx.hand_counts[i] {
                 let needed = (current_counts[i] - ctx.hand_counts[i]) as i32;
-                let avail_in_wall = ctx.wrapper.remain_counts[i] as i32;
-                if needed > avail_in_wall { return 0.0; }
+                let avail_in_wall = ctx.wrapper.nokorihai[i];
+                if (needed as u8) > ctx.wrapper.remain_counts[i] { return 0.0; }
 
                 let dist = paidistance(&ctx.hand_counts, i);
                 let dist_c = get_dist_coef(dist);
                 let kind_c = get_kind_coef(ctx.wrapper.game_state, i);
 
                 for _ in 0..needed {
-                    probability *= (avail_in_wall as f64) / rest;
+                    probability *= (avail_in_wall) / rest;
                     probability *= dist_c;
                     probability *= kind_c;
                     rest -= 1.0;
@@ -410,7 +442,7 @@ pub fn chiitoi_point(
              let agari_state = ctx.wrapper.game_state.get_agari(
                  ctx.wrapper.game_state.teban as usize,
                  &test_mentsu,
-                 &vec![], // Chiitoi: no open melds
+                 &vec![], // Chiitoi
                  false
              );
              let mut yakus = ctx.wrapper.game_state.get_condition_yaku(

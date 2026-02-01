@@ -8,3 +8,4 @@ mahjong_core = { path = "../mahjong_core" }
 anyhow = "1.0"
 itertools = "0.12"
 rayon = "1.8"
+rand = "0.9.2"

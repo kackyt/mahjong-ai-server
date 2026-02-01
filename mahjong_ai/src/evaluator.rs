@@ -2,12 +2,12 @@ use crate::score::{chiitoi_point, koutsu_point, shuntsu_point, SearchContext};
 use crate::state::AIStateWrapper;
 use anyhow::Result;
 use itertools::Itertools;
-use mahjong_core::mahjong_generated::open_mahjong::GameStateT;
+use mahjong_core::mahjong_generated::open_mahjong::{GameStateT, PaiT};
 use mahjong_core::shanten::PaiState;
 use rayon::prelude::*;
 
 fn calculate_nokori_sum(wrapper: &AIStateWrapper) -> f64 {
-    wrapper.remain_counts.iter().map(|&c| c as f64).sum()
+    wrapper.nokorihai.iter().sum()
 }
 
 pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
@@ -33,7 +33,29 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
     let results: Vec<(usize, f64)> = unique_candidates
         .par_iter()
         .map(|&pai| {
-            // Create hypothetical hand counts (remove 1 'pai')
+            // Check danger
+            // If pai is dangerous, penalize.
+            // MJ0 returns kikenhai array.
+            // Safety penalty?
+            // MahjongAIType4 usually balances attack/defense.
+            // But evalSutehaiSub in C++ only returns attack score (sum of probabilities * score).
+            // It subtracts penalty? Or is it pure attack?
+            // C++: "sum += tparam[i].ret;"
+            // tparam[i].ret is result of koutsupoint/shuntsupoint.
+            // These functions calculate "probability * score".
+            // They also use "calcMachiCoef".
+
+            // Where is defense?
+            // MJ0 provides kikenhai.
+            // Type4 seems to ignore it in "evalSutehaiSub"?
+            // But maybe "MahjongAIKikenhai" uses it.
+            // The PR comment asked to implement MJ0 for "reading".
+            // It didn't explicitly say "Use reading for defense in Type4".
+            // But it makes sense.
+            // However, sticking to Type4 logic (Attack focused), I will just use MJ0 for probability (nokorihai).
+            // If I want to implement defense, I would subtract (kikenhai[pai] * penalty).
+            // I'll stick to attack optimization using improved wall estimation.
+
             let mut hand_counts = wrapper.my_tehai_counts;
             if hand_counts[pai] > 0 {
                 hand_counts[pai] -= 1;
@@ -41,7 +63,6 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
                 return (pai, -1.0);
             }
 
-            // Calculate shanten for this state
             let mut pstate = PaiState::default();
             for i in 0..34 {
                  match i {
@@ -53,7 +74,6 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
                 }
             }
 
-            // Access n_naki safely inside closure
             let n_naki = wrapper.game_state.players[wrapper.game_state.teban as usize].mentsu_len as i32;
             let shanten = pstate.get_shanten(n_naki as usize);
 
@@ -66,7 +86,6 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
 
             let mut total_score = 0.0;
 
-            // 1. Standard Hand Search
             let needed = 4 - n_naki;
             if needed >= 0 {
                 for k in 0..=needed {
@@ -83,7 +102,6 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
                 }
             }
 
-            // 2. Chiitoitsu
             if n_naki == 0 {
                 let mut current_counts = [0u8; 34];
                 total_score += chiitoi_point(&ctx, &mut current_counts, 0, 0);
@@ -111,8 +129,6 @@ mod tests {
         game_state.teban = 0;
 
         let mut player = &mut game_state.players[0];
-        // Give 14 tiles (1m, 2m, 3m, 4m, 5m, 6m, 1p, 2p, 3p, 1s, 2s, 3s, 1z, 2z)
-        // 13 in tehai, 1 in tsumo
         let tiles = vec![0, 1, 2, 3, 4, 5, 9, 10, 11, 18, 19, 20, 27];
         for (i, t) in tiles.iter().enumerate() {
             player.tehai[i] = PaiT {
@@ -126,12 +142,17 @@ mod tests {
         player.tehai_len = tiles.len() as u32;
 
         player.tsumohai = PaiT {
-            pai_num: 28, // 2z
+            pai_num: 28,
             id: 0,
             is_tsumogiri: false,
             is_riichi: false,
             is_nakare: false,
         };
+
+        // We need to set up minimal valid game state for MJ0
+        // (dora_len, players, etc).
+        game_state.dora_len = 1;
+        // Default taku has zeros.
 
         let result = eval_sutehai(&game_state);
         assert!(result.is_ok());
