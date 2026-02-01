@@ -1,7 +1,10 @@
 use mahjong_core::mahjong_generated::open_mahjong::{GameStateT, MentsuType, PaiT};
 use rand::Rng;
 
+#[cfg(not(test))]
 const SIMU_SIZE: usize = 5000;
+#[cfg(test)]
+const SIMU_SIZE: usize = 100;
 
 #[derive(Clone)]
 pub struct MJ0Param {

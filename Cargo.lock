@@ -57,6 +57,7 @@ name = "ai_dll"
 version = "0.1.0"
 dependencies = [
  "ai_bridge",
+ "anyhow",
  "libc",
  "mahjong_ai",
  "mahjong_core",

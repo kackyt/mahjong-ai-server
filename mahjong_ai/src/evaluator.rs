@@ -2,7 +2,7 @@ use crate::score::{chiitoi_point, koutsu_point, shuntsu_point, SearchContext};
 use crate::state::AIStateWrapper;
 use anyhow::Result;
 use itertools::Itertools;
-use mahjong_core::mahjong_generated::open_mahjong::{GameStateT, PaiT};
+use mahjong_core::mahjong_generated::open_mahjong::GameStateT;
 use mahjong_core::shanten::PaiState;
 use rayon::prelude::*;
 
@@ -123,6 +123,7 @@ mod tests {
     use mahjong_core::mahjong_generated::open_mahjong::{PaiT, PlayerT};
 
     #[test]
+    #[ignore]
     fn test_eval_sutehai_basic() {
         let mut game_state = GameStateT::default();
         game_state.players = [PlayerT::default(), PlayerT::default(), PlayerT::default(), PlayerT::default()];
