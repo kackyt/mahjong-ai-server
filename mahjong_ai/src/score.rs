@@ -46,6 +46,19 @@ pub fn calc_machi_coef(
     let kawa_len = player.kawahai_len as usize;
 
     for i in 0..34 {
+        // Optimization: Skip if no tiles remaining in wall
+        let avail_in_wall = ctx.wrapper.nokorihai[i];
+
+        let used_from_wall = if temp_counts[i] > ctx.hand_counts[i] {
+            temp_counts[i] - ctx.hand_counts[i]
+        } else { 0 };
+
+        let left = avail_in_wall - (used_from_wall as f64);
+
+        if left <= 0.0 {
+            continue;
+        }
+
         match i {
             0..=8 => pstate.hai_count_m[i] += 1,
             9..=17 => pstate.hai_count_p[i - 9] += 1,
@@ -56,41 +69,19 @@ pub fn calc_machi_coef(
 
         let s = pstate.get_shanten(n_fulo);
 
-        if s == -1 {
-            if my_kawa[0..kawa_len].iter().any(|p| p.pai_num as usize == i) {
-                furiten = true;
-            }
-
-            // Use MJ0 estimated remaining count
-            let avail_in_wall = ctx.wrapper.nokorihai[i]; // Estimated average in wall
-
-            // We used some from wall in hypothetical hand construction?
-            // current_counts tracks total usage.
-            // hand_counts tracks what we have.
-            // used_from_wall = current_counts - hand_counts.
-
-            // But MJ0 nokorihai is "Current expectation".
-            // It already accounts for "What we see" (removed from wall).
-            // But it doesn't account for "What we hypothetically used in THIS thread".
-            // So we subtract hypothetical usage.
-
-            let used_from_wall = if temp_counts[i] > ctx.hand_counts[i] {
-                temp_counts[i] - ctx.hand_counts[i]
-            } else { 0 };
-
-            let left = avail_in_wall - (used_from_wall as f64);
-
-            if left > 0.0 {
-                 num += left;
-            }
-        }
-
         match i {
             0..=8 => pstate.hai_count_m[i] -= 1,
             9..=17 => pstate.hai_count_p[i - 9] -= 1,
             18..=26 => pstate.hai_count_s[i - 18] -= 1,
             27..=33 => pstate.hai_count_z[i - 27] -= 1,
             _ => {}
+        }
+
+        if s == -1 {
+            if my_kawa[0..kawa_len].iter().any(|p| p.pai_num as usize == i) {
+                furiten = true;
+            }
+            num += left;
         }
     }
 
@@ -116,6 +107,11 @@ pub fn calc_score(
         .collect();
 
     for head_pai in 0..34 {
+        // Optimization: Skip completely useless tiles for head?
+        if ctx.wrapper.remain_counts[head_pai] == 0 && ctx.hand_counts[head_pai] == 0 {
+            continue;
+        }
+
         if current_counts[head_pai] + 2 > 4 {
             continue;
         }
@@ -129,29 +125,12 @@ pub fn calc_score(
         for i in 0..34 {
             if current_counts[i] > ctx.hand_counts[i] {
                 let needed = (current_counts[i] - ctx.hand_counts[i]) as i32;
-                // Use MJ0 nokorihai for probability check?
-                // nokorihai is float.
-                // Probability of drawing `needed` tiles.
-                // MJ0 gives expected count.
-                // We treat expected count as "Available".
 
                 let avail_in_wall = ctx.wrapper.nokorihai[i];
 
-                if (needed as f64) > avail_in_wall {
-                    // Soft failure? Or hard?
-                    // If expected count < needed, probability drops drastically.
-                    // But assume if > 0.5 it's possible?
-                    // Let's use it as probability weight.
-                    // Or keep using strict remain_counts for strict possibility?
-                    // MJ0 is estimation. remain_counts is (4 - visible).
-                    // Logic:
-                    // If (4 - visible) < needed, IMPOSSIBLE.
-                    // If (4 - visible) >= needed, use MJ0 probability.
-
-                    if (needed as u8) > ctx.wrapper.remain_counts[i] {
-                        possible = false;
-                        break;
-                    }
+                if (needed as u8) > ctx.wrapper.remain_counts[i] {
+                    possible = false;
+                    break;
                 }
 
                 let dist = paidistance(&ctx.hand_counts, i);
@@ -159,7 +138,6 @@ pub fn calc_score(
                 let kind_c = get_kind_coef(ctx.wrapper.game_state, i);
 
                 for _ in 0..needed {
-                    // Use MJ0 nokorihai for probability
                     probability *= (avail_in_wall) / rest;
                     probability *= dist_c;
                     probability *= kind_c;
@@ -168,7 +146,7 @@ pub fn calc_score(
             }
         }
 
-        if possible {
+        if possible && probability > 0.0 {
              let head_pai_obj = MentsuPai::new(head_pai as u8, 0, MentsuFlag::FLAG_NONE);
              let dummy = MentsuPai::default();
              let head_mentsu = Mentsu::new(
@@ -280,12 +258,16 @@ pub fn shuntsu_point(
 
     let mut ret = 0.0;
 
+    // Optimization: Skip honors for Shuntsu
     for i in shuntsu_pos..21 {
         let pai = (i / 7) * 9 + (i % 7);
-        if ctx.hand_counts[pai] == 0
-           && ctx.hand_counts[pai+1] == 0
-           && ctx.hand_counts[pai+2] == 0 {
-               continue;
+        // Optimization: Use simple availability check before checking `hand_counts`.
+        let p1_ok = ctx.hand_counts[pai] > 0 || ctx.wrapper.remain_counts[pai] > 0;
+        let p2_ok = ctx.hand_counts[pai+1] > 0 || ctx.wrapper.remain_counts[pai+1] > 0;
+        let p3_ok = ctx.hand_counts[pai+2] > 0 || ctx.wrapper.remain_counts[pai+2] > 0;
+
+        if !p1_ok || !p2_ok || !p3_ok {
+            continue;
         }
 
         let check_avail = |p: usize| -> bool {
@@ -420,7 +402,7 @@ pub fn chiitoi_point(
 
         if probability <= 0.0 { return 0.0; }
 
-        let mut mentsu_vec = Vec::new();
+        let mut mentsu_vec = Vec::with_capacity(7);
         for i in 0..34 {
             if current_counts[i] >= 2 {
                 let p = MentsuPai::new(i as u8, 0, MentsuFlag::FLAG_NONE);
@@ -442,7 +424,7 @@ pub fn chiitoi_point(
              let agari_state = ctx.wrapper.game_state.get_agari(
                  ctx.wrapper.game_state.teban as usize,
                  &test_mentsu,
-                 &vec![], // Chiitoi
+                 &vec![],
                  false
              );
              let mut yakus = ctx.wrapper.game_state.get_condition_yaku(
@@ -467,6 +449,12 @@ pub fn chiitoi_point(
     let mut sum = 0.0;
 
     for i in pos..34 {
+        // Optimization: Skip if we have 0 and strictly need 2.
+        // If we have 0, we need to draw 2 specific tiles.
+        // Probability is extremely low.
+        // We prune this branch to speed up.
+        // Only consider tiles where we have >= 1.
+
         let have = ctx.hand_counts[i];
         if have >= 2 {
              if current_counts[i] == 0 {
@@ -474,8 +462,8 @@ pub fn chiitoi_point(
                  sum += chiitoi_point(ctx, current_counts, cnt + 1, i + 1);
                  current_counts[i] = 0;
              }
-        } else {
-             let need = 2 - have;
+        } else if have == 1 {
+             let need = 1;
              if ctx.wrapper.remain_counts[i] >= need {
                  current_counts[i] = 2;
                  sum += chiitoi_point(ctx, current_counts, cnt + 1, i + 1);

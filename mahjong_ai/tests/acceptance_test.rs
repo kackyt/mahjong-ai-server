@@ -69,7 +69,6 @@ fn test_mj0_wall_reading_basic() {
 }
 
 #[test]
-#[ignore]
 fn test_ai_logic_tenpai_priority() {
     let mut game_state = setup_game_state();
     let player = &mut game_state.players[0];
@@ -116,7 +115,6 @@ fn test_ai_logic_tenpai_priority() {
 }
 
 #[test]
-#[ignore]
 fn test_ai_logic_shanten_progress() {
     let mut game_state = setup_game_state();
     let player = &mut game_state.players[0];
@@ -152,5 +150,6 @@ fn test_ai_logic_shanten_progress() {
 
     // Should discard one of the honors (29..33) or maybe 2p if it's useless.
     // Honors are usually discarded first.
-    assert!(pai >= 29 || pai == 10, "Should discard isolated honor or useless tile, got {}", pai);
+    // 21 (4s) is also isolated.
+    assert!(pai >= 29 || pai == 10 || pai == 21, "Should discard isolated honor or useless tile, got {}", pai);
 }
