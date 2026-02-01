@@ -153,3 +153,138 @@ fn test_ai_logic_shanten_progress() {
     // 21 (4s) is also isolated.
     assert!(pai >= 29 || pai == 10 || pai == 21, "Should discard isolated honor or useless tile, got {}", pai);
 }
+
+#[test]
+fn test_ai_logic_yaku_priority_tanyao() {
+    let mut game_state = setup_game_state();
+    let player = &mut game_state.players[0];
+    game_state.rule.enable_kuitan = true; // Ensure Kuitan is enabled if relevant (though this is menzen)
+
+    // Setup:
+    // 23m 456p 456s 66z (White Dragon pair)
+    // Tsumo: 8m
+
+    // Hand:
+    // 2m(1), 3m(2) -> Wait 1m, 4m.
+    // 456p (Completed)
+    // 456s (Completed)
+    // 66z (Pair - White Dragon) -> Yaku: Yakuhai (if triplet)
+
+    // If we have 23m and draw 8m... wait, let's construct a choice.
+    // Choice between 1m discard and 2m discard?
+
+    // Let's try:
+    // 234m (Completed)
+    // 67p (Ryanmen 58p)
+    // 23s (Ryanmen 14s)
+    // 88s (Pair)
+    // Tsumo: 5s
+
+    // If I have 234m, 67p, 23s, 88s, 5s.
+    // 23s + 5s is useless.
+
+    // Let's try "Tanyao vs Pinfu vs Nothing".
+    // 23m, 78m.
+    // Discard 1m or 9m?
+
+    // Better example: Tanyao choice.
+    // Hand: 234m 234p 234s 67s 5s(Tsumo)
+    // 67s + 5s -> 567s.
+    // So 4 mentsu complete. Need pair.
+    // Hand was 13 tiles + Tsumo = 14.
+    // 234m, 234p, 234s, 67s.
+    // Tsumo 5s. -> 567s.
+    // Now we have 4 completed shuntsu: 234m, 234p, 234s, 567s.
+    // No pair. This is "Hadaka Tanki" state if we discard one?
+    // No, we have 14 tiles. 4*3 = 12. 2 tiles left.
+
+    // Let's construct a Tenpai choice.
+    // 23m 456p 456s 66z(White) 8m(Tsumo)
+    // 23m + 8m -> Useless.
+    // Hand: 23m, 456p, 456s, 66z.
+    // We are Tenpai on 1m, 4m.
+    // If we discard 8m, we stay Tenpai.
+    // This doesn't test Yaku choice.
+
+    // Test case: Choice between 1m and 4m?
+    // 23456m.
+    // If we cut 1m -> 23456m left.
+    // If we cut 6m -> 12345m left.
+
+    // Let's try:
+    // Hand: 23m 456p 789s 88p(Pair) + 1m(Tsumo)
+    // 123m (Pinfu/Tanyao?) 1m is terminal. No Tanyao.
+    // If we had 4m instead of 1m?
+
+    // Scenario:
+    // Hand: 34m 456p 456s 88p
+    // Tsumo: 2m
+    // Hand becomes: 234m (No Tanyao).
+    // Tsumo: 5m
+    // Hand becomes: 345m (Tanyao).
+
+    // We need a discard choice.
+    // Hand: 2m 3m 4m 5m 6m 7m ...
+    // Let's say we have 2m, 5m, 8m.
+    // And other completed sets.
+    // 234m, 567m.
+
+    // Specific Tanyao test:
+    // Hand: 1m 2m 3m 4m 5m 6m 456p 456s 55z
+    // Discard 1m -> 23456m ... wait 147m?
+    // Discard 1m -> 234m 56m ... wait 47m. Tanyao confirmed (if 55z is non-honor? 55z is White? No 27+4 = 31. White is 31).
+    // 55z is 5z? 5z is 27+4 = 31?
+    // Indices: 0-8 (m), 9-17 (p), 18-26 (s), 27-33 (z).
+    // z0=E, z1=S, z2=W, z3=N, z4=Haku, z5=Hatsu, z6=Chun.
+    // Tanyao requires no 1,9,z.
+
+    // Setup:
+    // 23m 456p 456s 22s(Pair)
+    // Tsumo: 1m
+    // Hand: 123m(1,9 mixed), 456p, 456s, 22s.
+    // Discard 1m: Tenpai on 1m/4m? No.
+
+    // Let's try structure where we have 1m and 4m as floating tiles, and we must cut one.
+    // 23m + 1m -> 123m (No Tanyao)
+    // 23m + 4m -> 234m (Tanyao)
+    // We hold 1m, 2m, 3m, 4m.
+    // We must discard 1m or 4m.
+    // Rest of hand is Tanyao safe.
+    // 456p 456s 22p.
+
+    let tiles = vec![
+        0, 1, 2, 3,     // 1m, 2m, 3m, 4m
+        12, 13, 14,     // 456p (Indices 9+3, 9+4, 9+5) -> 12, 13, 14
+        21, 22, 23,     // 456s (Indices 18+3...) -> 21, 22, 23
+        10, 10,         // 2p pair (Indices 9+1) -> 10, 10
+    ];
+    // 1m(0), 2m(1), 3m(2), 4m(3)
+    // 4p(12), 5p(13), 6p(14)
+    // 4s(21), 5s(22), 6s(23)
+    // 2p(10), 2p(10)
+    // Total 13 tiles.
+    // Tsumo: Let's say we just drew the 4m(3).
+
+    // If discard 1m(0): Hand has 234m (Tanyao possible).
+    // If discard 4m(3): Hand has 123m (No Tanyao).
+
+    // The evaluator should prefer Tanyao (higher score).
+
+    for (i, &t) in tiles.iter().enumerate() {
+        // Leave last one for tsumo logic simulation if needed, but here we fill tehai.
+        if i < 13 {
+            player.tehai[i] = create_pai(t);
+        }
+    }
+    player.tehai_len = 13;
+    player.tsumohai = create_pai(3); // Draw 4m
+    // But wait, 1m is in hand (index 0).
+    // So we have 1,2,3,4m.
+
+    let result = eval_sutehai(&game_state);
+    assert!(result.is_ok());
+    let (pai, _score) = result.unwrap();
+
+    // Expect discard 1m (0) to keep Tanyao potential with 234m.
+    assert_eq!(pai, 0, "Should discard 1m (0) to aim for Tanyao over 4m (3)");
+}
