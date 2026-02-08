@@ -21,21 +21,9 @@ pub struct MahjongAIState {
     tsumohai: i32,
 }
 
-// WIN32 Architecture expects stdcall and 32-bit integers.
-// While standard Rust maps `usize` to pointer size (32-bit on x86, 64-bit on x64),
-// the external interface specifically requests `UINT` (u32) in the signature documentation provided.
-// However, `param1`/`param2` are often pointers cast to integers.
-// The previous comment says: `UINT (WINAPI *MJSendMessage)(LPVOID,UINT,UINT,UINT);`
-// `LPVOID` is a pointer. `UINT` is 32-bit unsigned int.
-// So on 32-bit system, `LPVOID` and `UINT` are same size.
-// On 64-bit system, `LPVOID` is 64-bit, `UINT` is 32-bit.
-// "Maujong is WIN32 architecture" implies it is a 32-bit application running on Windows.
-// Therefore, pointers are 32-bit.
-// Using `u32` for pointers is correct for 32-bit target, but strict provenance in Rust prefers casting.
-// We will use `u32` in the FFI signature to match the explicit request and "WIN32" constraint.
-
+// Windows (32-bit/64-bit) expects system/stdcall for WINAPI callbacks.
 #[cfg(windows)]
-type MJSendMessage = extern "stdcall" fn(*const c_void, u32, u32, u32) -> u32;
+type MJSendMessage = extern "system" fn(*const c_void, u32, u32, u32) -> u32;
 #[cfg(not(windows))]
 type MJSendMessage = extern "system" fn(*const c_void, u32, usize, usize) -> usize;
 
@@ -239,7 +227,7 @@ unsafe fn sync_game_state(
 
 #[cfg(windows)]
 #[no_mangle]
-pub extern "stdcall" fn MJPInterfaceFunc(
+pub extern "system" fn MJPInterfaceFunc(
     inst: *mut MahjongAIState,
     message: u32,
     param1: u32,
@@ -249,6 +237,8 @@ pub extern "stdcall" fn MJPInterfaceFunc(
     let name_ptr = name.as_ptr();
 
     use mahjong_ai::evaluator::eval_sutehai;
+
+    let _ = param1; // Suppress unused warning
 
     // Check message value directly
     match message {
@@ -284,7 +274,6 @@ pub extern "stdcall" fn MJPInterfaceFunc(
     }
 }
 
-// Fallback for non-windows (tests/linux dev) to ensure compilation
 #[cfg(not(windows))]
 #[no_mangle]
 pub extern "system" fn MJPInterfaceFunc(
@@ -297,6 +286,8 @@ pub extern "system" fn MJPInterfaceFunc(
     let name_ptr = name.as_ptr();
 
     use mahjong_ai::evaluator::eval_sutehai;
+
+    let _ = param1;
 
     match message as u32 {
         MJPI_CREATEINSTANCE => std::mem::size_of::<MahjongAIState>() as usize,
