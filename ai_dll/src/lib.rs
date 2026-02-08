@@ -21,7 +21,22 @@ pub struct MahjongAIState {
     tsumohai: i32,
 }
 
-// Updated to use usize for pointers/params to support 64-bit and match ai_bridge
+// WIN32 Architecture expects stdcall and 32-bit integers.
+// While standard Rust maps `usize` to pointer size (32-bit on x86, 64-bit on x64),
+// the external interface specifically requests `UINT` (u32) in the signature documentation provided.
+// However, `param1`/`param2` are often pointers cast to integers.
+// The previous comment says: `UINT (WINAPI *MJSendMessage)(LPVOID,UINT,UINT,UINT);`
+// `LPVOID` is a pointer. `UINT` is 32-bit unsigned int.
+// So on 32-bit system, `LPVOID` and `UINT` are same size.
+// On 64-bit system, `LPVOID` is 64-bit, `UINT` is 32-bit.
+// "Maujong is WIN32 architecture" implies it is a 32-bit application running on Windows.
+// Therefore, pointers are 32-bit.
+// Using `u32` for pointers is correct for 32-bit target, but strict provenance in Rust prefers casting.
+// We will use `u32` in the FFI signature to match the explicit request and "WIN32" constraint.
+
+#[cfg(windows)]
+type MJSendMessage = extern "stdcall" fn(*const c_void, u32, u32, u32) -> u32;
+#[cfg(not(windows))]
 type MJSendMessage = extern "system" fn(*const c_void, u32, usize, usize) -> usize;
 
 static mut MESSAGE_FUNC: Option<MJSendMessage> = None;
@@ -39,6 +54,15 @@ unsafe fn sync_game_state(
 
     // 1. Get Tehai (My Hand)
     let mut tehai_struct: MJITehai = std::mem::zeroed();
+
+    #[cfg(windows)]
+    callback(
+        inst as *const c_void,
+        MJMI_GETTEHAI,
+        0,
+        &mut tehai_struct as *mut _ as u32,
+    );
+    #[cfg(not(windows))]
     callback(
         inst as *const c_void,
         MJMI_GETTEHAI,
@@ -149,12 +173,21 @@ unsafe fn sync_game_state(
     // 2. Get Kawa
     for i in 0..4 {
         let mut kawahai_buf = [0u32; 256];
+
+        #[cfg(windows)]
+        let count = callback(
+            inst as *const c_void,
+            MJMI_GETKAWA,
+            i as u32,
+            kawahai_buf.as_mut_ptr() as u32,
+        );
+        #[cfg(not(windows))]
         let count = callback(
             inst as *const c_void,
             MJMI_GETKAWA,
             i as usize,
             kawahai_buf.as_mut_ptr() as usize,
-        );
+        ) as u32;
 
         let player = &mut game_state.players[i];
         for k in 0..count as usize {
@@ -173,12 +206,20 @@ unsafe fn sync_game_state(
 
     // 3. Get Dora
     let mut dora_buf = [0u32; 8];
+    #[cfg(windows)]
+    let dora_count = callback(
+        inst as *const c_void,
+        MJMI_GETDORA,
+        dora_buf.as_mut_ptr() as u32,
+        0,
+    );
+    #[cfg(not(windows))]
     let dora_count = callback(
         inst as *const c_void,
         MJMI_GETDORA,
         dora_buf.as_mut_ptr() as usize,
         0,
-    );
+    ) as u32;
 
     for i in 0..dora_count as usize {
         if i < 8 {
@@ -198,6 +239,54 @@ unsafe fn sync_game_state(
 
 #[cfg(windows)]
 #[no_mangle]
+pub extern "stdcall" fn MJPInterfaceFunc(
+    inst: *mut MahjongAIState,
+    message: u32,
+    param1: u32,
+    param2: u32,
+) -> u32 {
+    let name: &'static str = "MahjongAI Type4 Rust\0";
+    let name_ptr = name.as_ptr();
+
+    use mahjong_ai::evaluator::eval_sutehai;
+
+    // Check message value directly
+    match message {
+        MJPI_CREATEINSTANCE => std::mem::size_of::<MahjongAIState>() as u32,
+        MJPI_INITIALIZE => {
+            unsafe {
+                MESSAGE_FUNC = Some(std::mem::transmute(param2 as usize));
+            }
+            0
+        }
+        MJPI_SUTEHAI => {
+            unsafe {
+                if let Some(func) = MESSAGE_FUNC {
+                    match sync_game_state(inst, func) {
+                        Ok(game_state) => {
+                            match eval_sutehai(&game_state) {
+                                Ok((pai, _score)) => {
+                                    return consts::MJPIR_SUTEHAI | (pai as u32);
+                                },
+                                Err(_) => {
+                                    // Fallback
+                                }
+                            }
+                        },
+                        Err(_) => {}
+                    }
+                }
+            }
+            consts::MJPIR_SUTEHAI | 13
+        }
+        MJPI_YOURNAME => name_ptr as u32,
+        _ => 0,
+    }
+}
+
+// Fallback for non-windows (tests/linux dev) to ensure compilation
+#[cfg(not(windows))]
+#[no_mangle]
 pub extern "system" fn MJPInterfaceFunc(
     inst: *mut MahjongAIState,
     message: usize,
@@ -209,7 +298,6 @@ pub extern "system" fn MJPInterfaceFunc(
 
     use mahjong_ai::evaluator::eval_sutehai;
 
-    // Check message value directly
     match message as u32 {
         MJPI_CREATEINSTANCE => std::mem::size_of::<MahjongAIState>() as usize,
         MJPI_INITIALIZE => {
