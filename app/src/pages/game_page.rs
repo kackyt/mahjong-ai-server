@@ -15,17 +15,8 @@ use ai_bridge::interface::G_STATE;
 pub fn view<'a>(
     state: AppState,
     turns: u32,
-    is_riichi: bool,
+    riichi_intent: bool,
     image_cache: &ImageCache,
-    can_ron: bool,
-    can_pon: bool,
-    can_chi: bool,
-    can_kan: bool,
-    bakaze: u32,
-    kyoku: u32,
-    honba: u32,
-    riichibou: u32,
-    oya: u32,
 ) -> Element<'a, Message> {
     unsafe {
         let core_state = &G_STATE;
@@ -125,6 +116,70 @@ pub fn view<'a>(
             let p2_fulo = fulo::view(&p2.mentsu[0..p2.mentsu_len as usize], image_cache, false);
             let p3_fulo = fulo::view(&p3.mentsu[0..p3.mentsu_len as usize], image_cache, true);
 
+            // Derive derived flags using G_STATE
+            let mut can_ron = false;
+            let mut can_pon = false;
+            let mut can_chi = false;
+            let mut can_kan = false;
+
+            if core_state.teban as usize != 0 {
+                let discarder_idx = (core_state.teban as usize + core_state.player_len as usize)
+                    % core_state.player_len as usize;
+                if let Some(tile) = core_state.players[discarder_idx].kawahai.iter().last() {
+                    println!("DISCARDER: {}", discarder_idx);
+                    println!("DISCARD: {}", tile);
+                    // 1. Ron
+                    let t = mahjong_core::mahjong_generated::open_mahjong::PaiT {
+                        pai_num: tile.pai_num,
+                        id: 0,
+                        is_tsumogiri: false,
+                        is_riichi: false,
+                        is_nakare: false,
+                    };
+                    if let Some(_) = core_state.check_ron(0, &t) {
+                        can_ron = true;
+                        println!("CAN RON");
+                    }
+                    // 2. Pon/Kan
+                    if !core_state.players[0].is_riichi {
+                        // Assuming P0
+                        if !core_state.check_pon(0, &t).is_empty() {
+                            println!("CAN PON");
+                            can_pon = true;
+                        }
+                        // check_minkan roughly corresponds to Kan on discard (Dai-minkan)
+                        if !core_state.check_minkan(0, &t).is_empty() {
+                            println!("CAN KAN");
+                            can_kan = true;
+                        }
+
+                        // 3. Chi
+                        let from_left = discarder_idx == 3; // P3 is left of P0
+                        if from_left {
+                            if !core_state.check_chii(0, &t).is_empty() {
+                                println!("CAN CHI");
+                                can_chi = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            let bakaze = core_state.bakaze;
+            let kyoku = core_state.kyoku_id; // Using kyoku_id as Kyoku number? No, kyoku_id is timestamp.
+                                             // core_state doesn't seem to track 'East 1 Bureau' as a simple number pair in exposed fields easily?
+                                             // Actually 'bakaze' is there. 'kyoku_id' is NOT the bureau number.
+                                             // Looking at main.rs previously check:
+                                             // self.kyoku = 1; ... self.kyoku = self.oya + 1;
+                                             // G_STATE doesn't have 'kyoku' (bureau number). It has 'oya' and 'bakaze'.
+                                             // Bureau number is roughly oya + 1?
+                                             // In 4-player, Oya rotates 0->1->2->3.
+                                             // If Oya is 0, it's East 1. If 1, East 2.
+            let kyoku_display = core_state.oya + 1;
+            let honba = core_state.tsumobou;
+            let riichibou = core_state.riichibou;
+            let oya = core_state.oya;
+
             // Styles
             // Styles
             let text_style = |t: &str| text(t).style(color!(255, 255, 255)).size(20);
@@ -145,7 +200,7 @@ pub fn view<'a>(
                 _ => "?",
             };
 
-            let bakaze_text = format!("{} {}局", get_wind_name(bakaze), kyoku);
+            let bakaze_text = format!("{} {}局", get_wind_name(bakaze), kyoku_display);
             let honba_text = format!("{}本場 供託{}", honba, riichibou);
 
             // Fixed Layout Construction
@@ -191,7 +246,7 @@ pub fn view<'a>(
                         }
                         r = r
                             .push(
-                                Checkbox::new("リーチ", is_riichi)
+                                Checkbox::new("リーチ", riichi_intent)
                                     .on_toggle_maybe(isnt_riichi.then_some(Message::ToggleRiichi)),
                             )
                             .spacing(10);
@@ -280,6 +335,9 @@ pub fn view<'a>(
             .padding(10)
             .align_items(iced::Alignment::Center);
 
+            // Calculate derived flags for 1-player too (or just reuse logic?)
+            // This block is for 4-player. 1-player is in else block.
+
             let center_table = container(
                 column![
                     // P2 River (Top Center)
@@ -353,25 +411,10 @@ pub fn view<'a>(
                     }
                     r = r
                         .push(
-                            Checkbox::new("リーチ", is_riichi)
+                            Checkbox::new("リーチ", riichi_intent)
                                 .on_toggle_maybe(isnt_riichi.then_some(Message::ToggleRiichi)),
                         )
                         .spacing(10);
-                    if can_ron {
-                        r = r.push(button("ロン").on_press(Message::Ron));
-                    }
-                    if can_pon {
-                        r = r.push(button("ポン").on_press(Message::Pon));
-                    }
-                    if can_chi {
-                        r = r.push(button("チー").on_press(Message::Chi));
-                    }
-                    if can_kan {
-                        r = r.push(button("カン").on_press(Message::Kan));
-                    }
-                    if can_ron || can_pon || can_chi || can_kan {
-                        r = r.push(button("パス").on_press(Message::Pass));
-                    }
                     r
                 }
             ]

@@ -42,7 +42,7 @@ extern crate libc;
 struct App {
     play_log: play_log::PlayLog,
     state: AppState,
-    is_riichi: bool,
+    riichi_intent: bool,
     turns: u32,
     is_show_modal: bool,
     modal_message: String,
@@ -51,17 +51,6 @@ struct App {
     ai_files: Vec<combo_box::State<String>>,
     ai_instances: Vec<AI>,
     image_cache: crate::images::ImageCache,
-    can_ron: bool,
-    can_pon: bool,
-    can_chi: bool,
-    can_kan: bool,
-
-    // Hanchan State
-    bakaze: u32,
-    kyoku: u32,
-    honba: u32,
-    riichibou: u32,
-    oya: u32,
 }
 
 #[derive(Clone)]
@@ -233,11 +222,6 @@ impl Application for App {
                     self.show_modal(&status_messages.join("\n"));
                 }
 
-                self.can_ron = false;
-                self.can_pon = false;
-                self.can_chi = false;
-                self.can_kan = false;
-
                 let player_len = if self.game_mode == crate::types::GameMode::OnePlayerSolo {
                     1
                 } else {
@@ -250,19 +234,21 @@ impl Application for App {
 
                 self.state = AppState::Started;
                 self.turns = 0;
-                self.is_riichi = false;
+                self.riichi_intent = false;
 
                 // Initialize Round Info
-                self.bakaze = 0;
-                self.kyoku = 1;
-                self.honba = 0;
-                self.riichibou = 0;
-                self.oya = 0; // P0 starts as Oya? Or Random? For simplicity P0.
-                state.oya = self.oya;
-                state.bakaze = self.bakaze;
-                state.kyoku_id = 1; // Or timestamp
-                state.tsumobou = self.honba as u32;
-                state.riichibou = self.riichibou as u32;
+                state.oya = state.oya; // Keep existing or reset? create() resets?
+                                       // create() sets rule, players. It DOES NOT reset oya/bakaze explicitly usually?
+                                       // Actually create() is:
+                                       // self.player_len = player_len;
+                                       // self.rule.update_to_default(); ...
+
+                // We should probably initialize G_STATE vals if this is a NEW game.
+                state.bakaze = 0;
+                state.kyoku_id = 1;
+                state.tsumobou = 0;
+                state.riichibou = 0;
+                state.oya = 0;
 
                 // Trigger AI if it's AI's turn (only in 4P Vs AI)
                 let teban = state.teban as usize;
@@ -290,8 +276,11 @@ impl Application for App {
                     let pai = &state.players[0].tsumohai;
                     debug!("Dahai {}", pai.pai_num);
                 }
-                let result =
-                    state.sutehai(&mut self.play_log, index, !state_riichi && self.is_riichi);
+                let result = state.sutehai(
+                    &mut self.play_log,
+                    index,
+                    !state_riichi && self.riichi_intent,
+                );
 
                 match result {
                     Ok(_) => {
@@ -332,7 +321,7 @@ impl Application for App {
                     }
                     Err(m) => {
                         self.show_modal(&format!("{:?}", m));
-                        self.is_riichi = state_riichi;
+                        self.riichi_intent = state_riichi;
                     }
                 }
                 Command::none()
@@ -363,7 +352,7 @@ impl Application for App {
                 Command::none()
             }
             Message::ToggleRiichi(r) => {
-                self.is_riichi = r;
+                self.riichi_intent = r;
                 Command::none()
             }
             Message::FontLoaded => Command::none(),
@@ -458,9 +447,9 @@ impl Application for App {
                                     let mut can_chi_flag = false;
                                     let mut can_kan_flag = false;
 
-                                    let discarder_idx =
-                                        (state.teban as usize + state.player_len as usize - 1)
-                                            % state.player_len as usize;
+                                    let discarder_idx = (state.teban as usize
+                                        + state.player_len as usize)
+                                        % state.player_len as usize;
                                     let tile_in_river =
                                         state.players[discarder_idx].kawahai.iter().last();
 
@@ -469,59 +458,37 @@ impl Application for App {
                                         if discarder_idx != 0 {
                                             let p0 = &state.players[0];
 
-                                            let state_riichi = player_is_riichi(0);
-
-                                            if !state_riichi {
-                                                // 2. Check PON
-                                                // Count matching pai_num
-                                                let count = p0
-                                                    .tehai
-                                                    .iter()
-                                                    .filter(|t| t.pai_num == tile.pai_num)
-                                                    .count();
-                                                if count >= 2 {
-                                                    can_pon_flag = true;
-                                                }
-                                                if count >= 3 {
-                                                    can_kan_flag = true;
-                                                }
-
-                                                // 3. Check CHI
-                                                // Only from Left Player (P3). Relative to P0 (0), Left is 3.
-                                                // discarder_idx must be 3.
-                                                let from_left = discarder_idx == 3;
-                                                if from_left && tile.pai_num < 27 {
-                                                    // Honors cannot Chi
-                                                    let n = tile.pai_num;
-                                                    let has = |num: u8| {
-                                                        p0.tehai.iter().any(|t| t.pai_num == num)
-                                                    };
-                                                    let valid_chi = |a: u8, b: u8| -> bool {
-                                                        if a / 9 != n / 9 || b / 9 != n / 9 {
-                                                            return false;
-                                                        }
-                                                        has(a) && has(b)
-                                                    };
-                                                    if (n >= 2 && valid_chi(n - 2, n - 1))
-                                                        || (n >= 1 && valid_chi(n - 1, n + 1))
-                                                        || valid_chi(n + 1, n + 2)
-                                                    {
-                                                        can_chi_flag = true;
-                                                    }
-                                                }
-                                            }
-
-                                            // 1. Check RON (Can Ron even if in Riichi, but check_ron logic handles everything)
+                                            // 1. Check RON
                                             let t = PaiT {
                                                 pai_num: tile.pai_num,
                                                 id: 0,
                                                 is_tsumogiri: false,
                                                 is_riichi: false,
+                                                // Assuming is_nakare is false for Ron check check_ron probably ignores it or needs it correct
                                                 is_nakare: false,
                                             };
 
                                             if let Some(_) = state.check_ron(0, &t) {
                                                 can_ron_flag = true;
+                                            }
+
+                                            // 2. Check PON/KAN
+                                            let state_riichi = player_is_riichi(0);
+                                            if !state_riichi {
+                                                if !state.check_pon(0, &t).is_empty() {
+                                                    can_pon_flag = true;
+                                                }
+                                                // check_minkan roughly corresponds to Kan on discard (Dai-minkan)
+                                                if !state.check_minkan(0, &t).is_empty() {
+                                                    can_kan_flag = true;
+                                                }
+                                                // 3. Check CHI (Only from Kamicha/Left)
+                                                // discarder_idx == 3 means Left relative to P0
+                                                if discarder_idx == 3 {
+                                                    if !state.check_chii(0, &t).is_empty() {
+                                                        can_chi_flag = true;
+                                                    }
+                                                }
                                             }
 
                                             if can_ron_flag
@@ -530,10 +497,7 @@ impl Application for App {
                                                 || can_kan_flag
                                             {
                                                 debug!("Pause for Human Action: Ron={}, Pon={}, Chi={}, Kan={}", can_ron_flag, can_pon_flag, can_chi_flag, can_kan_flag);
-                                                self.can_ron = can_ron_flag;
-                                                self.can_pon = can_pon_flag;
-                                                self.can_chi = can_chi_flag;
-                                                self.can_kan = can_kan_flag;
+                                                // Pausing by returning none. View will calculate and show buttons.
                                                 return Command::none();
                                             }
                                         }
@@ -583,10 +547,6 @@ impl Application for App {
             /// ロンボタンが押された時の処理です。
             Message::Ron => unsafe {
                 // Execute Ron
-                self.can_ron = false;
-                self.can_pon = false;
-                self.can_chi = false;
-                self.can_kan = false;
                 let state = &mut G_STATE;
 
                 // Usually ron_agari takes arguments or uses internal state about who discarded?
@@ -607,28 +567,28 @@ impl Application for App {
                 // I will calculate score manually if needed?
                 // Hopefully 'ron_agari' is there.
 
-                if let Ok(agari) = state.tsumo_agari(&mut self.play_log) {
-                    // FALLBACK: Try tsumo_agari just to verify API or use placeholder
-                    self.state = AppState::HandEnded;
-                    self.show_modal(&format!(
-                        "RON!\n{}\n{}翻\n{}符\n{}点",
-                        yaku_to_string(&agari.yaku),
-                        agari.han,
-                        agari.fu,
-                        agari.score
-                    ));
+                let discarder_idx =
+                    (state.teban as usize + state.player_len as usize) % state.player_len as usize;
+
+                if let Some(pai) = state.players[discarder_idx].kawahai.iter().last().cloned() {
+                    if let Ok(agari) = state.ron_agari(&mut self.play_log, 0, discarder_idx, &pai) {
+                        self.state = AppState::HandEnded;
+                        self.show_modal(&format!(
+                            "RON!\n{}\n{}翻\n{}符\n{}点",
+                            yaku_to_string(&agari.yaku),
+                            agari.han,
+                            agari.fu,
+                            agari.score
+                        ));
+                    } else {
+                        self.show_modal("Ron failed");
+                    }
                 } else {
-                    // Since ron_agari might not exist, we just show RON.
-                    self.state = AppState::HandEnded;
-                    self.show_modal("RON! (Score TBD)");
+                    self.show_modal("No tile to Ron");
                 }
                 Command::none()
             },
             Message::Pass => unsafe {
-                self.can_ron = false;
-                self.can_pon = false;
-                self.can_chi = false;
-                self.can_kan = false;
                 // Proceed to next turn
                 let state = &mut G_STATE;
                 state.tsumo(&mut self.play_log);
@@ -652,18 +612,13 @@ impl Application for App {
             },
             /// ポンボタンが押された時の処理です。
             Message::Pon => {
-                self.can_ron = false;
-                self.can_pon = false;
-                self.can_chi = false;
-                self.can_kan = false;
-
                 unsafe {
                     let state = &mut G_STATE;
                     // Find the tile to call (Last discard of CURRENT teban? No, teban advanced?)
                     // In sutehai, teban advanced.
                     // If P3 discarded, teban is P0.
                     // So discarder is (teban + 3) % 4.
-                    let discarder_idx = (state.teban as usize + state.player_len as usize - 1)
+                    let discarder_idx = (state.teban as usize + state.player_len as usize)
                         % state.player_len as usize;
                     if let Some(pai) = state.players[discarder_idx].kawahai.iter().last().cloned() {
                         let cands = state.check_pon(0, &pai);
@@ -682,13 +637,9 @@ impl Application for App {
             }
             /// チーボタンが押された時の処理です。
             Message::Chi => {
-                self.can_ron = false;
-                self.can_pon = false;
-                self.can_chi = false;
-                self.can_kan = false;
                 unsafe {
                     let state = &mut G_STATE;
-                    let discarder_idx = (state.teban as usize + state.player_len as usize - 1)
+                    let discarder_idx = (state.teban as usize + state.player_len as usize)
                         % state.player_len as usize;
                     if let Some(pai) = state.players[discarder_idx].kawahai.iter().last().cloned() {
                         let cands = state.check_chii(0, &pai);
@@ -706,10 +657,6 @@ impl Application for App {
             }
             /// カンボタンが押された時の処理です。
             Message::Kan => {
-                self.can_ron = false;
-                self.can_pon = false;
-                self.can_chi = false;
-                self.can_kan = false;
                 unsafe {
                     let state = &mut G_STATE;
                     let discarder_idx = (state.teban as usize + state.player_len as usize - 1)
@@ -732,17 +679,16 @@ impl Application for App {
                 let state = &mut G_STATE;
 
                 // Rotate Oya
-                let prev_oya = self.oya;
-                self.oya = (self.oya + 1) % 4;
-                if self.oya < prev_oya {
-                    self.bakaze += 1;
+                let prev_oya = state.oya;
+                state.oya = (state.oya + 1) % 4;
+                if state.oya < prev_oya {
+                    state.bakaze += 1;
                 }
-                self.kyoku = self.oya + 1;
                 // honba handling simplification (reset on rotation)
-                self.honba = 0;
+                state.tsumobou = 0;
 
                 // Check Game Over
-                if self.bakaze > 1 {
+                if state.bakaze > 1 {
                     // Game Over
                     self.state = AppState::GameFinished;
                     // Show Ranking
@@ -767,24 +713,18 @@ impl Application for App {
                         .collect::<Vec<String>>()
                         .join("\n");
                     self.show_modal(&format!("Game Over\n\n{}", msg));
-                    return Command::none();
+                    Command::none()
+                } else {
+                    // Start Next Hand
+                    state.start(&mut self.play_log);
+                    // Oya needs to draw the 14th tile
+                    state.tsumo(&mut self.play_log);
+
+                    self.state = AppState::Started;
+                    self.turns = 0;
+                    self.riichi_intent = false;
+                    Command::none()
                 }
-
-                // Start Next Hand
-                // Update State
-                state.oya = self.oya;
-                state.bakaze = self.bakaze;
-                state.tsumobou = self.honba as u32;
-
-                state.shuffle();
-                state.start(&mut self.play_log);
-                state.tsumo(&mut self.play_log);
-
-                self.state = AppState::Started;
-                self.turns = 0;
-                self.is_riichi = false;
-
-                Command::none()
             },
             Message::BackToTitle => {
                 self.state = AppState::Created;
@@ -799,17 +739,8 @@ impl Application for App {
             AppState::Started | AppState::HandEnded | AppState::GameFinished => game_page::view(
                 self.state,
                 self.turns,
-                self.is_riichi,
+                self.riichi_intent,
                 &self.image_cache,
-                self.can_ron,
-                self.can_pon,
-                self.can_chi,
-                self.can_kan,
-                self.bakaze,
-                self.kyoku,
-                self.honba,
-                self.riichibou,
-                self.oya,
             ),
         };
 
@@ -845,7 +776,7 @@ impl Application for App {
             App {
                 play_log: play_log::PlayLog::new(),
                 state: AppState::Created,
-                is_riichi: false,
+                riichi_intent: false,
                 turns: 0,
                 is_show_modal: false,
                 modal_message: String::new(),
@@ -861,15 +792,6 @@ impl Application for App {
                 // We will need a vector of these for 4-player mode.
                 ai_instances: vec![],
                 image_cache: crate::images::ImageCache::new(),
-                can_ron: false,
-                can_pon: false,
-                can_chi: false,
-                can_kan: false,
-                bakaze: 0,
-                kyoku: 1,
-                honba: 0,
-                riichibou: 0,
-                oya: 0,
             },
             load_font,
         )
