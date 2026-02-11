@@ -25,20 +25,28 @@ pub struct MahjongAIState {
 type MJSendMessage = extern "system" fn(*const c_void, u32, usize, usize) -> usize;
 
 static mut MESSAGE_FUNC: Option<MJSendMessage> = None;
+// Global state to avoid Box and avoid extending MahjongAIState beyond host's fixed buffer size (legacy compatibility).
+static mut G_STATE: Option<GameStateT> = None;
 
 unsafe fn sync_game_state(
     inst: *mut MahjongAIState,
     callback: MJSendMessage,
-) -> anyhow::Result<GameStateT> {
-    let mut game_state = GameStateT::default();
-    let state_ref = &*inst;
+) -> anyhow::Result<()> {
+    let state_ref = &mut *inst;
+
+    if G_STATE.is_none() {
+        G_STATE = Some(GameStateT::default());
+    }
+    let game_state = G_STATE.as_mut().unwrap();
 
     // Set basic info
     game_state.bakaze = state_ref.kyoku / 4;
     game_state.teban = state_ref.cha;
 
     // 1. Get Tehai (My Hand)
-    let mut tehai_struct: MJITehai = std::mem::zeroed();
+    // Use MJITehai1 to ensure sufficient buffer size (372 bytes) as some hosts write extended data.
+    // MJITehai (148 bytes) causes stack corruption if host writes MJITehai1.
+    let mut tehai_struct: ai_bridge::bindings::MJITehai1 = std::mem::zeroed();
 
     callback(
         inst as *const c_void,
@@ -251,7 +259,7 @@ unsafe fn sync_game_state(
     }
     game_state.dora_len = dora_count as u32;
 
-    Ok(game_state)
+    Ok(())
 }
 
 #[no_mangle]
@@ -273,6 +281,23 @@ pub extern "system" fn MJPInterfaceFunc(
         MJPI_CREATEINSTANCE => std::mem::size_of::<MahjongAIState>() as u32,
         MJPI_INITIALIZE => {
             unsafe {
+                if !inst.is_null() {
+                    // Initialize memory space given by host
+                    // Host allocates size returned by MJPI_CREATEINSTANCE (288 bytes)
+                    // We must initialize it to avoid garbage values if host doesn't write to it immediately
+                    // or if test app allocates without init.
+                    let state = &mut *inst;
+                    state.te_cnt = [0; 34];
+                    state.sute_cnt = [0; 34];
+                    state.kyoku = 0;
+                    state.cha = 0;
+                    state.kaze = 0;
+                    state.tsumohai = -1; // No tile drawn yet
+                }
+
+                if G_STATE.is_none() {
+                    G_STATE = Some(GameStateT::default());
+                }
                 MESSAGE_FUNC = Some(std::mem::transmute(param2));
             }
             0
@@ -281,13 +306,15 @@ pub extern "system" fn MJPInterfaceFunc(
             unsafe {
                 if let Some(func) = MESSAGE_FUNC {
                     match sync_game_state(inst, func) {
-                        Ok(game_state) => {
-                            match eval_sutehai(&game_state) {
-                                Ok((pai, _score)) => {
-                                    return consts::MJPIR_SUTEHAI | (pai as u32);
-                                }
-                                Err(_) => {
-                                    // Fallback
+                        Ok(_) => {
+                            if let Some(state) = &G_STATE {
+                                match eval_sutehai(state) {
+                                    Ok((pai, _score)) => {
+                                        return consts::MJPIR_SUTEHAI | (pai as u32);
+                                    }
+                                    Err(_) => {
+                                        // Fallback
+                                    }
                                 }
                             }
                         }
@@ -298,6 +325,12 @@ pub extern "system" fn MJPInterfaceFunc(
             consts::MJPIR_SUTEHAI | 13
         }
         MJPI_YOURNAME => name_ptr as u32,
+        MJPI_DESTROY => {
+            unsafe {
+                G_STATE = None;
+            }
+            0
+        }
         _ => 0,
     }
 }
