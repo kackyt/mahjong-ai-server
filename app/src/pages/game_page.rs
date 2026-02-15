@@ -39,27 +39,86 @@ pub fn view<'a>(
 
         if player_len == 4 {
             let p0 = &core_state.players[0];
-            let p1 = &core_state.players[1];
-            let p2 = &core_state.players[2];
-            let p3 = &core_state.players[3];
+            let bakaze = core_state.bakaze;
+            let kyoku = core_state.kyoku_id; // Using kyoku_id as Kyoku number? No, kyoku_id is timestamp.
+                                             // core_state doesn't seem to track 'East 1 Bureau' as a simple number pair in exposed fields easily?
+                                             // Actually 'bakaze' is there. 'kyoku_id' is NOT the bureau number.
+                                             // Looking at main.rs previously check:
+                                             // self.kyoku = 1; ... self.kyoku = self.oya + 1;
+                                             // G_STATE doesn't have 'kyoku' (bureau number). It has 'oya' and 'bakaze'.
+                                             // Bureau number is roughly oya + 1?
+                                             // In 4-player, Oya rotates 0->1->2->3.
+                                             // If Oya is 0, it's East 1. If 1, East 2.
+            let kyoku_display = core_state.oya + 1;
+            let honba = core_state.tsumobou;
+            let riichibou = core_state.riichibou;
+            let oya = core_state.oya;
 
-            // Rotation conventions:
-            // P0 (Bottom): 0
-            // P1 (Right/Shimocha): 270 (Vertical)
-            // P2 (Top/Toimen): 180 (Inverted).
-            // P3 (Left/Kamicha): 90 (Top pointing Right).
+            let text_style = |t: &str| text(t).style(color!(255, 255, 255)).size(20);
+            let score_style = |t: &str| text(t).style(color!(200, 200, 200)).size(16);
+            let oya_marker = |is_oya: bool| {
+                if is_oya {
+                    text(" [親]").style(color!(255, 100, 100)).size(20)
+                } else {
+                    text("").size(20)
+                }
+            };
+            let get_wind_name = |w: u32| match w {
+                0 => "東",
+                1 => "南",
+                2 => "西",
+                3 => "北",
+                _ => "?",
+            };
 
-            let p2_kawahai = kawahai::view(
-                &p2.kawahai,
-                p2.kawahai_len as usize,
-                image_cache,
-                180,
-                false,
-            );
-            let p3_kawahai =
-                kawahai::view(&p3.kawahai, p3.kawahai_len as usize, image_cache, 90, true);
-            let p1_kawahai =
-                kawahai::view(&p1.kawahai, p1.kawahai_len as usize, image_cache, 270, true);
+            let players_view = [1, 2, 3]
+                .iter()
+                .map(|i| {
+                    let player = &core_state.players[*i];
+                    column![
+                        row![
+                            text_style(&format!(
+                                "Player {} ({})",
+                                *i + 1,
+                                get_wind_name(*i as u32)
+                            )),
+                            oya_marker(oya == (*i) as u32),
+                            score_style(&format!("{}点", player.score))
+                        ]
+                        .spacing(10)
+                        .align_items(iced::Alignment::Center),
+                        kawahai::view(
+                            &player.kawahai,
+                            player.kawahai_len as usize,
+                            image_cache,
+                            0,
+                            false,
+                        ),
+                        row![
+                            fulo::view(
+                                &player.mentsu[0..player.mentsu_len as usize],
+                                image_cache,
+                                false,
+                            ),
+                            tehai::view(
+                                &player.tehai,
+                                player.tehai_len as usize,
+                                &player.tsumohai,
+                                player.is_tsumo,
+                                state == AppState::Started,
+                                image_cache,
+                                0,
+                                false,
+                                false,
+                            )
+                        ]
+                        .spacing(10)
+                        .align_items(iced::Alignment::Center),
+                    ]
+                    .spacing(10)
+                })
+                .collect::<Vec<_>>();
+
             let p0_kawahai =
                 kawahai::view(&p0.kawahai, p0.kawahai_len as usize, image_cache, 0, false);
 
@@ -74,47 +133,8 @@ pub fn view<'a>(
                 false,
                 false,
             );
-
-            // Opponent Tehais (Face down)
-            let p1_tehai = tehai::view(
-                &p1.tehai,
-                p1.tehai_len as usize,
-                &p1.tsumohai,
-                p1.is_tsumo,
-                false,
-                image_cache,
-                270,
-                true,
-                true,
-            );
-            let p2_tehai = tehai::view(
-                &p2.tehai,
-                p2.tehai_len as usize,
-                &p2.tsumohai,
-                p2.is_tsumo,
-                false,
-                image_cache,
-                180,
-                true,
-                false,
-            );
-            let p3_tehai = tehai::view(
-                &p3.tehai,
-                p3.tehai_len as usize,
-                &p3.tsumohai,
-                p3.is_tsumo,
-                false,
-                image_cache,
-                90,
-                true,
-                true,
-            );
-
             // Fulou (Melds)
             let p0_fulo = fulo::view(&p0.mentsu[0..p0.mentsu_len as usize], image_cache, false);
-            let p1_fulo = fulo::view(&p1.mentsu[0..p1.mentsu_len as usize], image_cache, true);
-            let p2_fulo = fulo::view(&p2.mentsu[0..p2.mentsu_len as usize], image_cache, false);
-            let p3_fulo = fulo::view(&p3.mentsu[0..p3.mentsu_len as usize], image_cache, true);
 
             // Derive derived flags using G_STATE
             let mut can_ron = false;
@@ -165,67 +185,12 @@ pub fn view<'a>(
                 }
             }
 
-            let bakaze = core_state.bakaze;
-            let kyoku = core_state.kyoku_id; // Using kyoku_id as Kyoku number? No, kyoku_id is timestamp.
-                                             // core_state doesn't seem to track 'East 1 Bureau' as a simple number pair in exposed fields easily?
-                                             // Actually 'bakaze' is there. 'kyoku_id' is NOT the bureau number.
-                                             // Looking at main.rs previously check:
-                                             // self.kyoku = 1; ... self.kyoku = self.oya + 1;
-                                             // G_STATE doesn't have 'kyoku' (bureau number). It has 'oya' and 'bakaze'.
-                                             // Bureau number is roughly oya + 1?
-                                             // In 4-player, Oya rotates 0->1->2->3.
-                                             // If Oya is 0, it's East 1. If 1, East 2.
-            let kyoku_display = core_state.oya + 1;
-            let honba = core_state.tsumobou;
-            let riichibou = core_state.riichibou;
-            let oya = core_state.oya;
-
             // Styles
-            // Styles
-            let text_style = |t: &str| text(t).style(color!(255, 255, 255)).size(20);
-            let score_style = |t: &str| text(t).style(color!(200, 200, 200)).size(16);
-            let oya_marker = |is_oya: bool| {
-                if is_oya {
-                    text(" [親]").style(color!(255, 100, 100)).size(20)
-                } else {
-                    text("").size(20)
-                }
-            };
-
-            let get_wind_name = |w: u32| match w {
-                0 => "東",
-                1 => "南",
-                2 => "西",
-                3 => "北",
-                _ => "?",
-            };
 
             let bakaze_text = format!("{} {}局", get_wind_name(bakaze), kyoku_display);
             let honba_text = format!("{}本場 供託{}", honba, riichibou);
 
             // Fixed Layout Construction
-
-            // 1. Top Bar (P2 Hand) - Fixed Height
-            let top_bar = container(
-                column![
-                    row![
-                        text_style("Player 2 (North)"),
-                        oya_marker(oya == 2),
-                        score_style(&format!("{}点", p2.score))
-                    ]
-                    .spacing(10)
-                    .align_items(iced::Alignment::Center),
-                    row![p2_fulo, p2_tehai]
-                        .spacing(5)
-                        .align_items(iced::Alignment::Center),
-                ]
-                .spacing(5)
-                .align_items(iced::Alignment::Center),
-            )
-            .height(Length::Fixed(120.0))
-            .width(Length::Fill)
-            .align_y(iced::alignment::Vertical::Bottom)
-            .center_x();
 
             // 2. Bottom Bar (P0 Hand) - Fixed Height
             let bottom_bar = container(
@@ -237,8 +202,13 @@ pub fn view<'a>(
                     ]
                     .spacing(10)
                     .align_items(iced::Alignment::Center),
-                    p0_tehai_elem, // Tehai
-                    p0_fulo,       // Fulo
+                    p0_kawahai, // Kawahai
+                    row![
+                        p0_tehai_elem, // Tehai
+                        p0_fulo,       // Fulo
+                    ]
+                    .spacing(10)
+                    .align_items(iced::Alignment::Center),
                     {
                         let mut r = Row::new();
                         if p0.is_tsumo {
@@ -276,51 +246,8 @@ pub fn view<'a>(
                         r
                     }
                 ]
-                .spacing(5)
-                .align_items(iced::Alignment::Center),
-            )
-            .height(Length::Fixed(140.0))
-            .width(Length::Fill)
-            .align_y(iced::alignment::Vertical::Top)
-            .center_x();
-
-            // 3. Middle Section
-
-            // Left Bar (P3 Hand) - Fixed Width
-            let left_bar = container(
-                column![
-                    text_style("Player 3 (West)"),
-                    oya_marker(oya == 3),
-                    score_style(&format!("{}点", p3.score)),
-                    row![p3_tehai, p3_fulo]
-                        .spacing(5)
-                        .align_items(iced::Alignment::Center),
-                ]
-                .spacing(5)
-                .align_items(iced::Alignment::Center),
-            )
-            .width(Length::Fixed(120.0))
-            .height(Length::Fill)
-            .align_x(iced::alignment::Horizontal::Right)
-            .center_y();
-
-            // Right Bar (P1 Hand) - Fixed Width
-            let right_bar = container(
-                column![
-                    text_style("Player 1 (East/South)"),
-                    oya_marker(oya == 1),
-                    score_style(&format!("{}点", p1.score)),
-                    row![p1_fulo, p1_tehai]
-                        .spacing(5)
-                        .align_items(iced::Alignment::Center)
-                ]
-                .spacing(5)
-                .align_items(iced::Alignment::Center),
-            )
-            .width(Length::Fixed(120.0))
-            .height(Length::Fill)
-            .align_x(iced::alignment::Horizontal::Left)
-            .center_y();
+                .spacing(5),
+            );
 
             // Center Table (Rivers + Info)
             let center_info = column![
@@ -332,45 +259,18 @@ pub fn view<'a>(
                 text_style(&format!("{} シャンテン", shanten)),
             ]
             .spacing(5)
-            .padding(10)
-            .align_items(iced::Alignment::Center);
-
-            // Calculate derived flags for 1-player too (or just reuse logic?)
-            // This block is for 4-player. 1-player is in else block.
-
-            let center_table = container(
-                column![
-                    // P2 River (Top Center)
-                    p2_kawahai,
-                    iced::widget::Space::with_height(Length::Fill),
-                    // Middle Row (P3 River | Info | P1 River)
-                    row![
-                        p3_kawahai,
-                        iced::widget::Space::with_width(Length::Fill),
-                        center_info,
-                        iced::widget::Space::with_width(Length::Fill),
-                        p1_kawahai
-                    ]
-                    .align_items(iced::Alignment::Center),
-                    iced::widget::Space::with_height(Length::Fill),
-                    // P0 River (Bottom Center)
-                    p0_kawahai
-                ]
-                .align_items(iced::Alignment::Center),
-            )
-            .width(Length::Fill)
-            .height(Length::Fill)
             .padding(10);
 
-            let middle_row = row![left_bar, center_table, right_bar].height(Length::Fill);
-
-            let content = column![top_bar, middle_row, bottom_bar];
+            let mut content = column![center_info];
+            for p_view in players_view {
+                content = content.push(p_view);
+            }
+            let content = content.push(bottom_bar);
 
             container(content)
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .center_x()
-                .center_y()
+                .padding(10)
                 .style(move |_: &_| container::Appearance {
                     background: Some(Background::Color(color!(42, 126, 25))),
                     ..Default::default()

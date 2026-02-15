@@ -75,14 +75,14 @@ impl AI {
     }
 }
 
-extern "stdcall" fn dummy_func(
+extern "system" fn dummy_func(
     _inst: *mut std::ffi::c_void,
     _message: usize,
     _param1: usize,
     _param2: usize,
 ) -> usize {
     // println!("Dummy AI Sutehai");
-    MJPIR_SUTEHAI as usize
+    (MJPIR_SUTEHAI | 13) as usize
 }
 
 fn find_dll_files() -> Vec<String> {
