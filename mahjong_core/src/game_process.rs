@@ -262,6 +262,7 @@ impl GameStateT {
     }
 
     /// 牌を捨てます。立直判定や一発の解除、河への追加を行います。
+    /// TODO: 鳴きが考慮されていないので追加する
     ///
     /// # Arguments
     /// * `play_log` - ログ
@@ -274,19 +275,45 @@ impl GameStateT {
         is_riichi: bool,
     ) -> anyhow::Result<PaiT> {
         let player = &mut self.players[self.teban as usize];
-        let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
-        let mut kawahai = match index {
-            13 => player.tsumohai.clone(),
-            _ => {
-                let p = tehai.remove(index);
+
+        let tehai_len = player.tehai_len as usize;
+
+        // ツモ切りの判定: indexがtehai_len以上
+        let is_tsumogiri = index >= tehai_len;
+
+        // 手出しの判定: indexがtehai_len未満の場合
+        let is_tedashi = index < tehai_len;
+
+        // インデックスの正当性チェック
+        ensure!(is_tsumogiri || is_tedashi, "Invalid discard index");
+
+        // 副露後のチェック: is_tsumoがfalseの場合、ツモ切りはできない
+        if !player.is_tsumo {
+            ensure!(!is_tsumogiri, "Cannot tsumogiri after fulo (no tsumo tile)");
+        }
+
+        let mut kawahai = if is_tsumogiri {
+            // ツモ切り
+            player.tsumohai.clone()
+        } else {
+            // 手出し
+            let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
+            let p = tehai.remove(index);
+
+            // ツモ番の場合のみ、ツモ牌を手牌に加えてソートする
+            if player.is_tsumo {
                 tehai.push(player.tsumohai.clone());
                 tehai.sort_unstable();
-                p
+            } else {
+                // 副露後の場合、手牌が減るので詰めを行う（removeで既に詰められているが、末尾の不要なデータをクリアする必要があるかもだが、tehai_lenで管理しているので配列の詰め直しだけで良い）
+                // ただし、player.tehaiは固定長配列(的な扱い)なので、tehai_lenを減らす処理は後で行われる。
+                // ここでは一時的なVec操作。後でplayer.tehaiに書き戻す。
             }
+            p
         };
 
         ensure!(
-            !(player.is_riichi && index != 13),
+            !(player.is_riichi && !is_tsumogiri),
             GameProcessError::IllegalSutehaiAfterRiichi
         );
 
@@ -294,7 +321,25 @@ impl GameStateT {
             ensure!(!player.is_riichi, "すでにリーチしています");
             ensure!(player.mentsu_len == 0, "面前ではありません");
             // シャンテン数チェック
-            let mut state = PaiState::from(&tehai);
+            // 手出し後の状態で判定するため、手牌から牌を切った後の状態（tsumohaiを含まない13枚or less）でチェックする必要があるか？
+            // リーチ宣言時は必ずツモ番である（is_tsumo == true）。
+            // なので、手出しした場合は tsumohai が tehai に入った状態で判定される。
+
+            // sutehai関数の元のロジックでは:
+            // let p = tehai.remove(index);
+            // tehai.push(player.tsumohai.clone());
+            // tehai.sort_unstable();
+            // p
+            // となっていたので、捨てた後の手牌（ツモ牌込み）でチェックしていた。
+
+            let mut tehai_check: Vec<PaiT> = player.tehai.iter().take(tehai_len).cloned().collect();
+            if !is_tsumogiri {
+                tehai_check.remove(index);
+                tehai_check.push(player.tsumohai.clone());
+                tehai_check.sort_unstable();
+            }
+
+            let mut state = PaiState::from(&tehai_check);
             let shanten = state.get_shanten(player.mentsu_len as usize);
             ensure!(shanten == 0, "テンパイではありません");
 
@@ -306,9 +351,34 @@ impl GameStateT {
             player.is_ippatsu = false;
         }
 
-        if index != 13 {
+        // 手牌の更新
+        if !is_tsumogiri {
+            let mut tehai: Vec<PaiT> = player.tehai.iter().take(tehai_len).cloned().collect();
+            tehai.remove(index);
+
+            if player.is_tsumo {
+                tehai.push(player.tsumohai.clone());
+                tehai.sort_unstable();
+            }
+            // 副露後の場合は単純に減るだけ
+
+            // 書き戻し
             for (i, item) in tehai.into_iter().enumerate() {
                 player.tehai[i] = item;
+            }
+            // 副露後などの場合、tehai_lenを更新する必要があるか？
+            // 元のロジックでは index != 13 の場合だけ書き戻しをしていた。
+            // 副露後の手出しの場合、tehai_len は本来減るはずだが、operate_fulo などの時点で既に減らされている？
+            // operate_fulo では tehai_len を減らしている。
+            // ここでの sutehai は「捨て牌」アクション。
+            // 14枚の手牌（13+1）から1枚捨てて13枚になる（通常）。
+            // 副露後: 10枚の手牌から1枚捨てて9枚になるのか？
+            // いや、operate_fuloで「晒した牌」は減る。残りの手牌から「打牌」をする。
+            // 例：ポン（2枚晒す）。手牌13枚 -> 11枚になる（ここでtehai_len=11）。
+            // その後、打牌をする。11枚の中から1枚捨てる。 -> 10枚になる。
+            // なので、is_tsumo == false の時は tehai_len を 1 減らす必要がある。
+            if !player.is_tsumo {
+                player.tehai_len -= 1;
             }
         }
 
