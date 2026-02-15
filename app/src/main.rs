@@ -47,6 +47,11 @@ struct App {
     ai_paths: [Option<String>; 4],
     ai_files: Vec<combo_box::State<String>>,
     ai_instances: Vec<AI>,
+    can_ron_flag: bool,
+    can_pon_flag: bool,
+    can_chi_flag: bool,
+    can_kan_flag: bool,
+    sutehai: PaiT,
 }
 
 #[derive(Clone)]
@@ -421,7 +426,8 @@ impl Application for App {
                         };
 
                         match result {
-                            Ok(_) => {
+                            Ok(sutehai) => {
+                                self.sutehai = sutehai;
                                 self.turns += 1;
                                 let is_game_over =
                                     if self.game_mode == crate::types::GameMode::OnePlayerSolo {
@@ -438,64 +444,51 @@ impl Application for App {
                                     // state.tsumo removed from here
 
                                     // Reset flags
-                                    let mut can_ron_flag = false;
-                                    let mut can_pon_flag = false;
-                                    let mut can_chi_flag = false;
-                                    let mut can_kan_flag = false;
+                                    self.can_ron_flag = false;
+                                    self.can_pon_flag = false;
+                                    self.can_chi_flag = false;
+                                    self.can_kan_flag = false;
 
-                                    let discarder_idx = (state.teban as usize
-                                        + state.player_len as usize)
-                                        % state.player_len as usize;
-                                    let tile_in_river =
-                                        state.players[discarder_idx].kawahai.iter().last();
+                                    let discarder_idx =
+                                        (state.teban as usize + state.player_len as usize - 1)
+                                            % state.player_len as usize;
 
-                                    if let Some(tile) = tile_in_river {
-                                        // Cannot call on own discard
-                                        if discarder_idx != 0 {
-                                            let p0 = &state.players[0];
+                                    // Cannot call on own discard
+                                    if discarder_idx != 0 {
+                                        // 1. Check RON
+                                        println!("DISCARDER: {}", discarder_idx);
+                                        println!("DISCARD: {}", self.sutehai);
 
-                                            // 1. Check RON
-                                            let t = PaiT {
-                                                pai_num: tile.pai_num,
-                                                id: 0,
-                                                is_tsumogiri: false,
-                                                is_riichi: false,
-                                                // Assuming is_nakare is false for Ron check check_ron probably ignores it or needs it correct
-                                                is_nakare: false,
-                                            };
+                                        if let Some(_) = state.check_ron(0, &self.sutehai) {
+                                            self.can_ron_flag = true;
+                                        }
 
-                                            if let Some(_) = state.check_ron(0, &t) {
-                                                can_ron_flag = true;
+                                        // 2. Check PON/KAN
+                                        if !state.check_pon(0, &self.sutehai).is_empty() {
+                                            self.can_pon_flag = true;
+                                        }
+                                        // check_minkan roughly corresponds to Kan on discard (Dai-minkan)
+                                        if !state.check_minkan(0, &self.sutehai).is_empty() {
+                                            self.can_kan_flag = true;
+                                        }
+                                        // 3. Check CHI (Only from Kamicha/Left)
+                                        // discarder_idx == 3 means Left relative to P0
+                                        if discarder_idx == 3 {
+                                            if !state.check_chii(0, &self.sutehai).is_empty() {
+                                                self.can_chi_flag = true;
                                             }
+                                        }
 
-                                            // 2. Check PON/KAN
-                                            let state_riichi = player_is_riichi(0);
-                                            if !state_riichi {
-                                                if !state.check_pon(0, &t).is_empty() {
-                                                    can_pon_flag = true;
-                                                }
-                                                // check_minkan roughly corresponds to Kan on discard (Dai-minkan)
-                                                if !state.check_minkan(0, &t).is_empty() {
-                                                    can_kan_flag = true;
-                                                }
-                                                // 3. Check CHI (Only from Kamicha/Left)
-                                                // discarder_idx == 3 means Left relative to P0
-                                                if discarder_idx == 3 {
-                                                    if !state.check_chii(0, &t).is_empty() {
-                                                        can_chi_flag = true;
-                                                    }
-                                                }
-                                            }
+                                        println!("can_ron_flag: {}, can_pon_flag: {}, can_chi_flag: {}, can_kan_flag: {}", self.can_ron_flag, self.can_pon_flag, self.can_chi_flag, self.can_kan_flag);
 
-                                            if can_ron_flag
-                                                || can_pon_flag
-                                                || can_chi_flag
-                                                || can_kan_flag
-                                            {
-                                                debug!("Pause for Human Action: Ron={}, Pon={}, Chi={}, Kan={}", can_ron_flag, can_pon_flag, can_chi_flag, can_kan_flag);
-                                                // Pausing by returning none. View will calculate and show buttons.
-                                                return Command::none();
-                                            }
+                                        if self.can_ron_flag
+                                            || self.can_pon_flag
+                                            || self.can_chi_flag
+                                            || self.can_kan_flag
+                                        {
+                                            debug!("Pause for Human Action: Ron={}, Pon={}, Chi={}, Kan={}", self.can_ron_flag, self.can_pon_flag, self.can_chi_flag, self.can_kan_flag);
+                                            // Pausing by returning none. View will calculate and show buttons.
+                                            return Command::none();
                                         }
                                     }
 
@@ -545,42 +538,17 @@ impl Application for App {
                 // Execute Ron
                 let state = &mut G_STATE;
 
-                // Usually ron_agari takes arguments or uses internal state about who discarded?
-                // Assuming it works based on last kawahai.
-                // Note: tsumo_agari handles Tsumo. logic usually auto-detects.
-                // Try tsumo_agari logic but adjusted? Or just assume engine supports it?
-                // Actually, 'state.tsumo_agari' name is suspicious. Maybe just 'agari'?
-                // But the struct is Generated.
-                // Let's assume ron_agari exists or tsumo_agari handles it if flags set?
-                // Wait, if it's discarded, it's not Tsumo.
-
-                // Check interface.rs: MJMI_GETAGARITEN calls taku.get_best_agari
-                // I will try to call state.ron_agari(&mut self.play_log) if implies implicit target.
-                // If fails compilation, I will fallback.
-
-                // For now, I'll use logic similar to Tsumo but set state ended.
-                // NOTE: Using tsumo_agari might FAIL since it expects Tsumo tile?
-                // I will calculate score manually if needed?
-                // Hopefully 'ron_agari' is there.
-
-                let discarder_idx =
-                    (state.teban as usize + state.player_len as usize) % state.player_len as usize;
-
-                if let Some(pai) = state.players[discarder_idx].kawahai.iter().last().cloned() {
-                    if let Ok(agari) = state.ron_agari(&mut self.play_log, 0, discarder_idx, &pai) {
-                        self.state = AppState::HandEnded;
-                        self.show_modal(&format!(
-                            "RON!\n{}\n{}翻\n{}符\n{}点",
-                            yaku_to_string(&agari.yaku),
-                            agari.han,
-                            agari.fu,
-                            agari.score
-                        ));
-                    } else {
-                        self.show_modal("Ron failed");
-                    }
+                if let Ok(agari) = state.ron_agari(&mut self.play_log, 0, 0, &self.sutehai) {
+                    self.state = AppState::HandEnded;
+                    self.show_modal(&format!(
+                        "RON!\n{}\n{}翻\n{}符\n{}点",
+                        yaku_to_string(&agari.yaku),
+                        agari.han,
+                        agari.fu,
+                        agari.score
+                    ));
                 } else {
-                    self.show_modal("No tile to Ron");
+                    self.show_modal("チョンボ！！！");
                 }
                 Command::none()
             },
@@ -610,23 +578,13 @@ impl Application for App {
             Message::Pon => {
                 unsafe {
                     let state = &mut G_STATE;
-                    // Find the tile to call (Last discard of CURRENT teban? No, teban advanced?)
-                    // In sutehai, teban advanced.
-                    // If P3 discarded, teban is P0.
-                    // So discarder is (teban + 3) % 4.
-                    let discarder_idx = (state.teban as usize + state.player_len as usize)
-                        % state.player_len as usize;
-                    if let Some(pai) = state.players[discarder_idx].kawahai.iter().last().cloned() {
-                        let cands = state.check_pon(0, &pai);
-                        if let Some(mentsu) = cands.first() {
-                            if let Err(e) =
-                                state.operate_fulo(&mut self.play_log, 0, mentsu.clone())
-                            {
-                                self.show_modal(&format!("Pon Error: {:?}", e));
-                            }
-                            // After fulo, it is P0's turn (set in operate_fulo).
-                            // Wait for Dahai.
+                    let cands = state.check_pon(0, &self.sutehai);
+                    if let Some(mentsu) = cands.first() {
+                        if let Err(e) = state.operate_fulo(&mut self.play_log, 0, mentsu.clone()) {
+                            self.show_modal(&format!("Pon Error: {:?}", e));
                         }
+                        // After fulo, it is P0's turn (set in operate_fulo).
+                        // Wait for Dahai.
                     }
                 }
                 Command::none()
@@ -635,17 +593,11 @@ impl Application for App {
             Message::Chi => {
                 unsafe {
                     let state = &mut G_STATE;
-                    let discarder_idx = (state.teban as usize + state.player_len as usize)
-                        % state.player_len as usize;
-                    if let Some(pai) = state.players[discarder_idx].kawahai.iter().last().cloned() {
-                        let cands = state.check_chii(0, &pai);
-                        // TODO: Select which Chi if multiple. Default to first.
-                        if let Some(mentsu) = cands.first() {
-                            if let Err(e) =
-                                state.operate_fulo(&mut self.play_log, 0, mentsu.clone())
-                            {
-                                self.show_modal(&format!("Chi Error: {:?}", e));
-                            }
+                    let cands = state.check_chii(0, &self.sutehai);
+                    // TODO: Select which Chi if multiple. Default to first.
+                    if let Some(mentsu) = cands.first() {
+                        if let Err(e) = state.operate_fulo(&mut self.play_log, 0, mentsu.clone()) {
+                            self.show_modal(&format!("Chi Error: {:?}", e));
                         }
                     }
                 }
@@ -655,16 +607,10 @@ impl Application for App {
             Message::Kan => {
                 unsafe {
                     let state = &mut G_STATE;
-                    let discarder_idx = (state.teban as usize + state.player_len as usize - 1)
-                        % state.player_len as usize;
-                    if let Some(pai) = state.players[discarder_idx].kawahai.iter().last().cloned() {
-                        let cands = state.check_minkan(0, &pai);
-                        if let Some(mentsu) = cands.first() {
-                            if let Err(e) =
-                                state.operate_fulo(&mut self.play_log, 0, mentsu.clone())
-                            {
-                                self.show_modal(&format!("Kan Error: {:?}", e));
-                            }
+                    let cands = state.check_minkan(0, &self.sutehai);
+                    if let Some(mentsu) = cands.first() {
+                        if let Err(e) = state.operate_fulo(&mut self.play_log, 0, mentsu.clone()) {
+                            self.show_modal(&format!("Kan Error: {:?}", e));
                         }
                     }
                 }
@@ -732,9 +678,15 @@ impl Application for App {
     fn view(&self) -> Element<Message> {
         let content: Element<_> = match self.state {
             AppState::Created => title_page::view(&self.ai_files, &self.ai_paths, self.game_mode),
-            AppState::Started | AppState::HandEnded | AppState::GameFinished => {
-                game_page::view(self.state, self.turns, self.riichi_intent)
-            }
+            AppState::Started | AppState::HandEnded | AppState::GameFinished => game_page::view(
+                self.state,
+                self.turns,
+                self.riichi_intent,
+                self.can_ron_flag,
+                self.can_pon_flag,
+                self.can_chi_flag,
+                self.can_kan_flag,
+            ),
         };
 
         let containered_content = container(content).padding(10);
@@ -784,6 +736,11 @@ impl Application for App {
                 // The user code used `ai_symbol` and `ai_inst` (singular).
                 // We will need a vector of these for 4-player mode.
                 ai_instances: vec![],
+                can_ron_flag: false,
+                can_pon_flag: false,
+                can_chi_flag: false,
+                can_kan_flag: false,
+                sutehai: PaiT::default(),
             },
             load_font,
         )

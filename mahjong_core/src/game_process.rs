@@ -271,7 +271,7 @@ impl GameStateT {
         play_log: &mut PlayLog,
         index: usize,
         is_riichi: bool,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PaiT> {
         let player = &mut self.players[self.teban as usize];
         let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
         let mut kawahai = match index {
@@ -311,7 +311,7 @@ impl GameStateT {
             }
         }
 
-        player.kawahai[player.kawahai_len as usize] = kawahai;
+        player.kawahai[player.kawahai_len as usize] = kawahai.clone();
 
         play_log.append_actions_log(
             self.kyoku_id,
@@ -331,7 +331,7 @@ impl GameStateT {
             self.teban = 0;
         }
 
-        Ok(())
+        Ok(kawahai)
     }
 
     /// ツモ和了の処理を行います。点数計算、スコア移動を適用し、結果を返します。
@@ -795,6 +795,10 @@ impl GameStateT {
         let n = pai.pai_num;
         let num = n % 9;
 
+        if player.is_riichi {
+            return res;
+        }
+
         let find = |target: u8| -> Option<usize> {
             player.tehai[0..player.tehai_len as usize]
                 .iter()
@@ -909,6 +913,10 @@ impl GameStateT {
         let mut count = 0;
         let mut idxs = Vec::new();
 
+        if player.is_riichi {
+            return res;
+        }
+
         for (i, p) in player.tehai[0..player.tehai_len as usize]
             .iter()
             .enumerate()
@@ -970,6 +978,10 @@ impl GameStateT {
         let player = &self.players[player_idx];
         let mut count = 0;
         let mut idxs = Vec::new();
+
+        if player.is_riichi {
+            return res;
+        }
 
         for (i, p) in player.tehai[0..player.tehai_len as usize]
             .iter()
