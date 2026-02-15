@@ -28,7 +28,7 @@ extern crate libc;
 // スレッドセーフではない
 pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(Default::default);
 pub static mut G_STRUCTURE_TYPE: Lazy<HashMap<*mut c_void, usize>> = Lazy::new(HashMap::new);
-pub type MJPInterfaceFuncP = extern "stdcall" fn(*mut c_void, usize, usize, usize) -> usize;
+pub type MJPInterfaceFuncP = extern "system" fn(*mut c_void, usize, usize, usize) -> usize;
 
 fn get_rule(state: &GameStateT, idx: u32) -> u32 {
     match idx {
@@ -108,7 +108,7 @@ unsafe fn mjsend_message_impl(
 
             if let Some(typ) = v {
                 if *typ == 1 {
-                    let tehai: &mut MJITehai1 = std::mem::transmute(param2);
+                    let tehai: &mut MJITehai1 = &mut *std::ptr::with_exposed_provenance_mut::<MJITehai1>(param2);
 
                     if param1 == 0 {
                         let player = &taku.players[taku.teban as usize];
@@ -126,7 +126,7 @@ unsafe fn mjsend_message_impl(
                     return 1;
                 }
             }
-            let tehai: &mut MJITehai = std::mem::transmute(param2);
+            let tehai: &mut MJITehai = &mut *std::ptr::with_exposed_provenance_mut::<MJITehai>(param2);
 
             if param1 == 0 {
                 let player = &taku.players[taku.teban as usize];
@@ -144,8 +144,8 @@ unsafe fn mjsend_message_impl(
             1
         }
         MJMI_GETMACHI => {
-            let p: *const MJITehai = std::mem::transmute(param1);
-            let mut p2: *mut u32 = std::mem::transmute(param2);
+            let p: *const MJITehai = std::ptr::with_exposed_provenance::<MJITehai>(param1);
+            let mut p2: *mut u32 = std::ptr::with_exposed_provenance_mut::<u32>(param2);
 
             let mut v_fulo: Vec<Mentsu> = Vec::new();
             let mut num = 0;
@@ -261,7 +261,7 @@ unsafe fn mjsend_message_impl(
             num
         }
         MJMI_GETAGARITEN => {
-            let p: *const MJITehai = std::mem::transmute(param1);
+            let p: *const MJITehai = std::ptr::with_exposed_provenance::<MJITehai>(param1);
             let agari_pai = Pai::new(param2 as u8, 0, false, false, false);
 
             let mut v_fulo: Vec<Mentsu> = Vec::new();
@@ -360,7 +360,7 @@ unsafe fn mjsend_message_impl(
         MJMI_GETKAWA => {
             let idx = (param1 & 0xFFFF) as usize;
             let player = &taku.players[idx];
-            let mut p: *mut u32 = std::mem::transmute(param2);
+            let mut p: *mut u32 = std::ptr::with_exposed_provenance_mut::<u32>(param2);
 
             for i in 0..player.kawahai_len as usize {
                 *p = player.kawahai[i].pai_num as u32;
@@ -372,7 +372,7 @@ unsafe fn mjsend_message_impl(
         MJMI_GETKAWAEX => {
             let idx = (param1 & 0xFFFF) as usize;
             let player = &taku.players[idx];
-            let mut p: *mut MJIKawahai = std::mem::transmute(param2);
+            let mut p: *mut MJIKawahai = std::ptr::with_exposed_provenance_mut::<MJIKawahai>(param2);
 
             for i in 0..player.kawahai_len as usize {
                 let kawa_ref = &mut *p;
@@ -385,12 +385,12 @@ unsafe fn mjsend_message_impl(
             player.kawahai_len.try_into().unwrap()
         }
         MJMI_FUKIDASHI => {
-            let p_cstr: *const c_char = std::mem::transmute(param1);
+            let p_cstr: *const c_char = std::ptr::with_exposed_provenance::<i8>(param1);
             let c_str: &CStr = CStr::from_ptr(p_cstr);
             println!("fukidashi");
 
             match c_str.to_str() {
-                Ok(str_slice) => {
+                Ok(_str_slice) => {
                     // println!("{}", str_slice);
                 }
                 _ => {}
@@ -399,7 +399,7 @@ unsafe fn mjsend_message_impl(
             0
         }
         MJMI_GETDORA => {
-            let mut p: *mut u32 = std::mem::transmute(param1);
+            let mut p: *mut u32 = std::ptr::with_exposed_provenance_mut::<u32>(param1);
             let dora = taku.get_dora();
             for i in 0..dora.len() as usize {
                 *p = dora[i].pai_num as u32;
@@ -431,7 +431,7 @@ unsafe fn mjsend_message_impl(
 }
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
-pub unsafe extern "stdcall" fn mjsend_message(
+pub unsafe extern "system" fn mjsend_message(
     inst: *mut c_void,
     message: usize,
     param1: usize,
