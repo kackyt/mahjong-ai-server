@@ -10,7 +10,7 @@ load-dll = ["ai_bridge/load-dll"]
 [dependencies]
 anyhow = "1.0.79"
 libc = "0.2.152"
-ai_bridge = { path = "../ai_bridge" }
+ai_bridge = { path = "../ai_bridge", features = ["load-dll"] }
 mahjong_core = { path = "../mahjong_core" }
 sentry = "0.32.1"
 clap = { version = "4.5.0", features = ["derive"] }

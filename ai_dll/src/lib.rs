@@ -310,7 +310,24 @@ pub extern "system" fn MJPInterfaceFunc(
                             if let Some(state) = &G_STATE {
                                 match eval_sutehai(state) {
                                     Ok((pai, _score)) => {
-                                        return consts::MJPIR_SUTEHAI | (pai as u32);
+                                        let player = &state.players[state.teban as usize];
+                                        // Try to find the tile in hand (tsumohai or tehai)
+                                        // Prioritize Tsumogiri (index 13) if tsumohai matches
+                                        if player.is_tsumo
+                                            && player.tsumohai.pai_num as usize == pai
+                                        {
+                                            return consts::MJPIR_SUTEHAI | 13;
+                                        }
+
+                                        // Find in tehai
+                                        for i in 0..player.tehai_len as usize {
+                                            if player.tehai[i].pai_num as usize == pai {
+                                                return consts::MJPIR_SUTEHAI | (i as u32);
+                                            }
+                                        }
+
+                                        // Fallback: If not found (shouldn't happen), try tsumohai index 13 just in case
+                                        return consts::MJPIR_SUTEHAI | 13;
                                     }
                                     Err(_) => {
                                         // Fallback

@@ -56,11 +56,10 @@ unsafe fn experiment(func: MJPInterfaceFuncP, inst: *mut c_void, play_log: &mut 
             .unwrap();
         let index = ret & 0x3F;
         let flag = ret & 0xFF80;
-        // println!("ret = {} flag = {:04x}", index, flag);
+        println!("ret = {} flag = {:04x}", index, flag);
 
         {
             let state = &mut G_STATE;
-            /*
             {
                 let player = &state.players[state.teban as usize];
                 for p in &player.tehai {
@@ -71,7 +70,6 @@ unsafe fn experiment(func: MJPInterfaceFuncP, inst: *mut c_void, play_log: &mut 
                 let shanten = PaiState::from(&player.tehai).get_shanten(0);
                 println!(" シャンテン数 {}\r", shanten);
             }
-             */
 
             if flag == MJPIR_SUTEHAI {
                 state.sutehai(play_log, index as usize, false);
