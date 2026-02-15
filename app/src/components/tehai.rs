@@ -4,7 +4,7 @@ use iced::{
 };
 use mahjong_core::mahjong_generated::open_mahjong::PaiT;
 
-use crate::{images::ImageCache, Message};
+use crate::{images, Message};
 
 pub fn view<'a>(
     tehai: &[PaiT],
@@ -12,14 +12,11 @@ pub fn view<'a>(
     tsumohai: &PaiT,
     is_tsumo: bool,
     is_interactive: bool,
-    image_cache: &ImageCache,
-    angle: u16,
     is_opponent: bool,
-    is_vertical: bool,
 ) -> Element<'a, Message> {
     let back_idx = 99;
 
-    let mk_img = |pai_num: u32| image_cache.get(pai_num, angle, false);
+    let mk_img = |pai_num: u32| images::get(pai_num, 0, false);
 
     let mut ui_tehai: Vec<Element<'a, Message>> = tehai[0..tehai_len]
         .iter()
@@ -53,10 +50,5 @@ pub fn view<'a>(
         ui_tehai.push(img);
     }
 
-    if is_vertical {
-        // Use column for vertical
-        iced::widget::Column::from_vec(ui_tehai).into()
-    } else {
-        Row::from_vec(ui_tehai).into()
-    }
+    Row::from_vec(ui_tehai).into()
 }

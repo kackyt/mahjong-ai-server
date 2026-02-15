@@ -7,17 +7,11 @@ use iced::{
 
 use crate::{
     components::{dora, fulo, kawahai, tehai},
-    images::ImageCache,
     types::{AppState, Message},
 };
 use ai_bridge::interface::G_STATE;
 
-pub fn view<'a>(
-    state: AppState,
-    turns: u32,
-    riichi_intent: bool,
-    image_cache: &ImageCache,
-) -> Element<'a, Message> {
+pub fn view<'a>(state: AppState, turns: u32, riichi_intent: bool) -> Element<'a, Message> {
     unsafe {
         let core_state = &G_STATE;
 
@@ -87,27 +81,14 @@ pub fn view<'a>(
                         ]
                         .spacing(10)
                         .align_items(iced::Alignment::Center),
-                        kawahai::view(
-                            &player.kawahai,
-                            player.kawahai_len as usize,
-                            image_cache,
-                            0,
-                            false,
-                        ),
+                        kawahai::view(&player.kawahai, player.kawahai_len as usize),
                         row![
-                            fulo::view(
-                                &player.mentsu[0..player.mentsu_len as usize],
-                                image_cache,
-                                false,
-                            ),
+                            fulo::view(&player.mentsu[0..player.mentsu_len as usize]),
                             tehai::view(
                                 &player.tehai,
                                 player.tehai_len as usize,
                                 &player.tsumohai,
                                 player.is_tsumo,
-                                state == AppState::Started,
-                                image_cache,
-                                0,
                                 false,
                                 false,
                             )
@@ -119,8 +100,7 @@ pub fn view<'a>(
                 })
                 .collect::<Vec<_>>();
 
-            let p0_kawahai =
-                kawahai::view(&p0.kawahai, p0.kawahai_len as usize, image_cache, 0, false);
+            let p0_kawahai = kawahai::view(&p0.kawahai, p0.kawahai_len as usize);
 
             let p0_tehai_elem = tehai::view(
                 &p0.tehai,
@@ -128,13 +108,10 @@ pub fn view<'a>(
                 &p0.tsumohai,
                 p0.is_tsumo,
                 state == AppState::Started,
-                image_cache,
-                0,
-                false,
                 false,
             );
             // Fulou (Melds)
-            let p0_fulo = fulo::view(&p0.mentsu[0..p0.mentsu_len as usize], image_cache, false);
+            let p0_fulo = fulo::view(&p0.mentsu[0..p0.mentsu_len as usize]);
 
             // Derive derived flags using G_STATE
             let mut can_ron = false;
@@ -281,9 +258,6 @@ pub fn view<'a>(
             let kawahai_elem = kawahai::view(
                 &core_state.players[0].kawahai,
                 core_state.players[0].kawahai_len as usize,
-                image_cache,
-                0,
-                false,
             );
             let tehai_elem = tehai::view(
                 &core_state.players[0].tehai,
@@ -291,9 +265,6 @@ pub fn view<'a>(
                 &core_state.players[0].tsumohai,
                 core_state.players[0].is_tsumo,
                 state == AppState::Started,
-                image_cache,
-                0,
-                false,
                 false,
             );
 

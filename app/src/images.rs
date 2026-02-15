@@ -1,38 +1,32 @@
 use iced::widget::image;
-use std::collections::HashMap;
 use std::env;
 
-pub struct ImageCache {
-    cache: HashMap<String, image::Handle>,
-}
+pub fn get(pai_num: u32, angle: u16, _is_red: bool) -> image::Handle {
+    // Red tile logic if needed (passing is_red, but file naming might be different)
+    // For now, let's assume standard names or handle 'red' suffix if passed.
+    // The original utils::painum2path handled standard lookup.
+    // We need rotated variants.
 
-impl ImageCache {
-    pub fn new() -> Self {
-        Self {
-            cache: HashMap::new(),
-        }
+    if pai_num == 99 {
+        return image::Handle::from_path(format!(
+            "{}/images/haiga/transparent.gif",
+            env!("CARGO_MANIFEST_DIR")
+        ));
     }
 
-    pub fn get(&self, pai_num: u32, angle: u16, _is_red: bool) -> image::Handle {
-        // Red tile logic if needed (passing is_red, but file naming might be different)
-        // For now, let's assume standard names or handle 'red' suffix if passed.
-        // The original utils::painum2path handled standard lookup.
-        // We need rotated variants.
+    let prefix = match angle {
+        90 => "ty",
+        180 => "t",
+        270 => "y",
+        _ => "",
+    };
 
-        let prefix = match angle {
-            90 => "ty",
-            180 => "t",
-            270 => "y",
-            _ => "",
-        };
+    // Reuse strict logic from utils, but adapted for rotation prefixes
+    let name = get_tile_name(pai_num);
+    let filename = format!("{}{}.gif", prefix, name);
+    let path = format!("{}/images/haiga/{}", env!("CARGO_MANIFEST_DIR"), filename);
 
-        // Reuse strict logic from utils, but adapted for rotation prefixes
-        let name = get_tile_name(pai_num);
-        let filename = format!("{}{}.gif", prefix, name);
-        let path = format!("{}/images/haiga/{}", env!("CARGO_MANIFEST_DIR"), filename);
-
-        image::Handle::from_path(path)
-    }
+    image::Handle::from_path(path)
 }
 
 fn get_tile_name(pai_num: u32) -> String {

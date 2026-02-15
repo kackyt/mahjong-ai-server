@@ -19,10 +19,7 @@ use iced::{
 };
 use log::{debug, info};
 use mahjong_core::{
-    game_process::GameProcessError,
-    mahjong_generated::open_mahjong::{MentsuFlag, MentsuPaiT, MentsuT, MentsuType, PaiT},
-    play_log,
-    shanten::PaiState,
+    game_process::GameProcessError, mahjong_generated::open_mahjong::PaiT, play_log,
 };
 
 use modal::Modal;
@@ -50,7 +47,6 @@ struct App {
     ai_paths: [Option<String>; 4],
     ai_files: Vec<combo_box::State<String>>,
     ai_instances: Vec<AI>,
-    image_cache: crate::images::ImageCache,
 }
 
 #[derive(Clone)]
@@ -736,12 +732,9 @@ impl Application for App {
     fn view(&self) -> Element<Message> {
         let content: Element<_> = match self.state {
             AppState::Created => title_page::view(&self.ai_files, &self.ai_paths, self.game_mode),
-            AppState::Started | AppState::HandEnded | AppState::GameFinished => game_page::view(
-                self.state,
-                self.turns,
-                self.riichi_intent,
-                &self.image_cache,
-            ),
+            AppState::Started | AppState::HandEnded | AppState::GameFinished => {
+                game_page::view(self.state, self.turns, self.riichi_intent)
+            }
         };
 
         let containered_content = container(content).padding(10);
@@ -791,7 +784,6 @@ impl Application for App {
                 // The user code used `ai_symbol` and `ai_inst` (singular).
                 // We will need a vector of these for 4-player mode.
                 ai_instances: vec![],
-                image_cache: crate::images::ImageCache::new(),
             },
             load_font,
         )
