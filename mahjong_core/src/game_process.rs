@@ -200,6 +200,7 @@ impl GameStateT {
             player.kawahai_len = 0;
             player.is_ippatsu = false;
             player.is_riichi = false;
+            player.mentsu_len = 0;
 
             if self.is_non_duplicate {
                 cursol = &mut self.taku_cursol;
