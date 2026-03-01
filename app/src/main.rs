@@ -708,6 +708,7 @@ impl Application for App {
                     self.can_chi_flag = false;
                     self.can_kan_flag = false;
 
+                    state.shuffle();
                     state.start(&mut self.play_log);
                     // Oya needs to draw the 14th tile
                     state.tsumo(&mut self.play_log);
