@@ -7,6 +7,7 @@ members = [
     "ai_bridge",
     "ai_wasm",
     "mahjong_ai",
+    "app"
 ]
 
 resolver = "2"

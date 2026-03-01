@@ -27,17 +27,16 @@ pub fn view<'a>(
             content = content.push(
                 row![
                     text(format!("Player {} AI:", i)),
-                    combo_box(
-                        &ai_files[i],
-                        "Select AI",
-                        ai_paths[i].as_ref(),
-                        move |s| Message::SelectAI(i, s)
-                    ),
+                    combo_box(&ai_files[i], "Select AI", ai_paths[i].as_ref(), move |s| {
+                        Message::SelectAI(i, s)
+                    }),
                 ]
                 .spacing(10),
             );
         }
     }
 
-    content.push(button("Start").on_press(Message::Start)).into()
+    content
+        .push(button("Start").on_press(Message::Start))
+        .into()
 }

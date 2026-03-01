@@ -6,7 +6,7 @@ use crate::{
         TakuT,
     },
     play_log::PlayLog,
-    shanten::{all_of_mentsu, PaiState},
+    shanten::{all_of_chiitoitsu, all_of_mentsu, PaiState},
 };
 use anyhow::{bail, ensure};
 use chrono::Utc;
@@ -50,6 +50,12 @@ impl RuleT {
 }
 
 impl GameStateT {
+    /// ゲームの状態を初期化します。
+    ///
+    /// # Arguments
+    /// * `title` - ゲームのタイトル
+    /// * `player_len` - プレイヤー人数（通常4人、または1人など）
+    /// * `play_log` - ログ記録用オブジェクト
     pub fn create(&mut self, title: &[u8], player_len: u32, play_log: &mut PlayLog) {
         self.player_len = player_len;
         self.rule.update_to_default();
@@ -66,6 +72,14 @@ impl GameStateT {
         play_log.append_game_log(uuid.hyphenated().to_string(), dt.timestamp() as u64);
     }
 
+    /// プレイヤーをゲームに登録します。
+    ///
+    /// # Arguments
+    /// * `name` - プレイヤー名
+    /// * `play_log` - ログ記録用オブジェクト
+    ///
+    /// # Returns
+    /// 登録されたプレイヤーのインデックスを返します。満員の場合はエラーになります。
     pub fn register_player(
         &mut self,
         name: &[u8],
@@ -147,6 +161,7 @@ impl GameStateT {
         }
     }
 
+    /// 局を開始します。配牌やドラの決定、各種状態のリセットを行います。
     pub fn start(&mut self, play_log: &mut PlayLog) {
         // 配牌
         self.taku_cursol = 14;
@@ -156,6 +171,7 @@ impl GameStateT {
         let dt = Utc::now();
         self.kyoku_id = (dt.timestamp() / (24 * 3600) * 100000) as u64;
         let mut kazes = [Some(0), Some(0), Some(0), Some(0)];
+        self.teban = self.oya;
 
         for idx in 0..self.player_len {
             kazes[idx as usize] = Some(self.get_zikaze(idx as usize) as i32);
@@ -185,6 +201,7 @@ impl GameStateT {
             player.kawahai_len = 0;
             player.is_ippatsu = false;
             player.is_riichi = false;
+            player.mentsu_len = 0;
 
             if self.is_non_duplicate {
                 cursol = &mut self.taku_cursol;
@@ -220,6 +237,7 @@ impl GameStateT {
         self.players[index].clone()
     }
 
+    /// ツモを行います。
     pub fn tsumo(&mut self, play_log: &mut PlayLog) -> anyhow::Result<()> {
         let player = &mut self.players[self.teban as usize];
         player.is_tsumo = true;
@@ -244,26 +262,59 @@ impl GameStateT {
         Ok(())
     }
 
+    /// 牌を捨てます。立直判定や一発の解除、河への追加を行います。
+    /// TODO: 副露対応を捨て牌処理に実装する（後日Issue化）
+    ///
+    /// # Arguments
+    /// * `play_log` - ログ
+    /// * `index` - 捨てる牌の手牌インデックス（13の場合はツモ切り）
+    /// * `is_riichi` - 立直宣言するかどうか
     pub fn sutehai(
         &mut self,
         play_log: &mut PlayLog,
         index: usize,
         is_riichi: bool,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PaiT> {
         let player = &mut self.players[self.teban as usize];
-        let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
-        let mut kawahai = match index {
-            13 => player.tsumohai.clone(),
-            _ => {
-                let p = tehai.remove(index);
+
+        let tehai_len = player.tehai_len as usize;
+
+        // ツモ切りの判定: indexがtehai_lenと等しい
+        let is_tsumogiri = index == tehai_len;
+
+        // 手出しの判定: indexがtehai_len未満の場合
+        let _is_tedashi = index < tehai_len;
+
+        // インデックスの正当性チェック
+        ensure!(index <= tehai_len, "Invalid discard index");
+
+        // 副露後のチェック: is_tsumoがfalseの場合、ツモ切りはできない
+        if !player.is_tsumo {
+            ensure!(!is_tsumogiri, "Cannot tsumogiri after fulo (no tsumo tile)");
+        }
+
+        let mut kawahai = if is_tsumogiri {
+            // ツモ切り
+            player.tsumohai.clone()
+        } else {
+            // 手出し
+            let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
+            let p = tehai.remove(index);
+
+            // ツモ番の場合のみ、ツモ牌を手牌に加えてソートする
+            if player.is_tsumo {
                 tehai.push(player.tsumohai.clone());
                 tehai.sort_unstable();
-                p
+            } else {
+                // 副露後の場合、手牌が減るので詰めを行う（removeで既に詰められているが、末尾の不要なデータをクリアする必要があるかもだが、tehai_lenで管理しているので配列の詰め直しだけで良い）
+                // ただし、player.tehaiは固定長配列(的な扱い)なので、tehai_lenを減らす処理は後で行われる。
+                // ここでは一時的なVec操作。後でplayer.tehaiに書き戻す。
             }
+            p
         };
 
         ensure!(
-            !(player.is_riichi && index != 13),
+            !(player.is_riichi && !is_tsumogiri),
             GameProcessError::IllegalSutehaiAfterRiichi
         );
 
@@ -271,7 +322,25 @@ impl GameStateT {
             ensure!(!player.is_riichi, "すでにリーチしています");
             ensure!(player.mentsu_len == 0, "面前ではありません");
             // シャンテン数チェック
-            let mut state = PaiState::from(&tehai);
+            // 手出し後の状態で判定するため、手牌から牌を切った後の状態（tsumohaiを含まない13枚or less）でチェックする必要があるか？
+            // リーチ宣言時は必ずツモ番である（is_tsumo == true）。
+            // なので、手出しした場合は tsumohai が tehai に入った状態で判定される。
+
+            // sutehai関数の元のロジックでは:
+            // let p = tehai.remove(index);
+            // tehai.push(player.tsumohai.clone());
+            // tehai.sort_unstable();
+            // p
+            // となっていたので、捨てた後の手牌（ツモ牌込み）でチェックしていた。
+
+            let mut tehai_check: Vec<PaiT> = player.tehai.iter().take(tehai_len).cloned().collect();
+            if !is_tsumogiri {
+                tehai_check.remove(index);
+                tehai_check.push(player.tsumohai.clone());
+                tehai_check.sort_unstable();
+            }
+
+            let mut state = PaiState::from(&tehai_check);
             let shanten = state.get_shanten(player.mentsu_len as usize);
             ensure!(shanten == 0, "テンパイではありません");
 
@@ -283,13 +352,38 @@ impl GameStateT {
             player.is_ippatsu = false;
         }
 
-        if index != 13 {
+        // 手牌の更新
+        if !is_tsumogiri {
+            let mut tehai: Vec<PaiT> = player.tehai.iter().take(tehai_len).cloned().collect();
+            tehai.remove(index);
+
+            if player.is_tsumo {
+                tehai.push(player.tsumohai.clone());
+                tehai.sort_unstable();
+            }
+            // 副露後の場合は単純に減るだけ
+
+            // 書き戻し
             for (i, item) in tehai.into_iter().enumerate() {
                 player.tehai[i] = item;
             }
+            // 副露後などの場合、tehai_lenを更新する必要があるか？
+            // 元のロジックでは index != 13 の場合だけ書き戻しをしていた。
+            // 副露後の手出しの場合、tehai_len は本来減るはずだが、operate_fulo などの時点で既に減らされている？
+            // operate_fulo では tehai_len を減らしている。
+            // ここでの sutehai は「捨て牌」アクション。
+            // 14枚の手牌（13+1）から1枚捨てて13枚になる（通常）。
+            // 副露後: 10枚の手牌から1枚捨てて9枚になるのか？
+            // いや、operate_fuloで「晒した牌」は減る。残りの手牌から「打牌」をする。
+            // 例：ポン（2枚晒す）。手牌13枚 -> 11枚になる（ここでtehai_len=11）。
+            // その後、打牌をする。11枚の中から1枚捨てる。 -> 10枚になる。
+            // なので、is_tsumo == false の時は tehai_len を 1 減らす必要がある。
+            if !player.is_tsumo {
+                player.tehai_len -= 1;
+            }
         }
 
-        player.kawahai[player.kawahai_len as usize] = kawahai;
+        player.kawahai[player.kawahai_len as usize] = kawahai.clone();
 
         play_log.append_actions_log(
             self.kyoku_id,
@@ -309,9 +403,10 @@ impl GameStateT {
             self.teban = 0;
         }
 
-        Ok(())
+        Ok(kawahai)
     }
 
+    /// ツモ和了の処理を行います。点数計算、スコア移動を適用し、結果を返します。
     pub fn tsumo_agari(&mut self, play_log: &mut PlayLog) -> anyhow::Result<Agari> {
         let player = &self.players[self.teban as usize];
         let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
@@ -326,7 +421,10 @@ impl GameStateT {
             .map(|m| m.pack())
             .collect();
 
-        let all_mentsu = all_of_mentsu(&mut state, fulo.len());
+        let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
+        if fulo.len() == 0 {
+            all_mentsu.extend(all_of_chiitoitsu(&state));
+        }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &player.tsumohai.pack());
 
         ensure!(all_mentsu_w_machi.len() > 0, "和了ではありません");
@@ -346,7 +444,9 @@ impl GameStateT {
             let payment = ((best_agari.score as f32 / 3.0).ceil() as i32 + 99) / 100 * 100;
             for i in 0..self.player_len as usize {
                 if i == self.teban as usize {
-                    scores[i] = best_agari.score + self.riichibou as i32 * 1000 + self.tsumobou as i32 * 300;
+                    scores[i] = best_agari.score
+                        + self.riichibou as i32 * 1000
+                        + self.tsumobou as i32 * 300;
                     score_diffs[i] = Some(scores[i]);
                 } else {
                     scores[i] = -(payment + self.tsumobou as i32 * 100);
@@ -358,7 +458,9 @@ impl GameStateT {
             let ko_payment = ((best_agari.score as f32 / 4.0).ceil() as i32 + 99) / 100 * 100;
             for i in 0..self.player_len as usize {
                 if i == self.teban as usize {
-                    scores[i] = best_agari.score + self.riichibou as i32 * 1000 + self.tsumobou as i32 * 300;
+                    scores[i] = best_agari.score
+                        + self.riichibou as i32 * 1000
+                        + self.tsumobou as i32 * 300;
                     score_diffs[i] = Some(scores[i]);
                 } else if i == self.oya as usize {
                     scores[i] = -(oya_payment + self.tsumobou as i32 * 100);
@@ -409,6 +511,7 @@ impl GameStateT {
         Ok(best_agari)
     }
 
+    /// ロン和了の処理を行います。点数計算、スコア移動（放銃者払い）を適用します。
     pub fn ron_agari(
         &mut self,
         play_log: &mut PlayLog,
@@ -429,7 +532,10 @@ impl GameStateT {
             .map(|m| m.pack())
             .collect();
 
-        let all_mentsu = all_of_mentsu(&mut state, fulo.len());
+        let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
+        if fulo.len() == 0 {
+            all_mentsu.extend(all_of_chiitoitsu(&state));
+        }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &pai.pack());
 
         ensure!(all_mentsu_w_machi.len() > 0, "和了ではありません");
@@ -445,7 +551,8 @@ impl GameStateT {
         let mut scores = [0; 4];
         let mut score_diffs = [Some(0); 4];
 
-        let total_score = best_agari.score + self.riichibou as i32 * 1000 + self.tsumobou as i32 * 300;
+        let total_score =
+            best_agari.score + self.riichibou as i32 * 1000 + self.tsumobou as i32 * 300;
 
         for i in 0..self.player_len as usize {
             if i == winner_idx {
@@ -499,6 +606,7 @@ impl GameStateT {
         Ok(best_agari)
     }
 
+    /// ロンが可能かどうかを判定します。フリテンチェックや役の確認を行います。
     pub fn check_ron(&self, winner_idx: usize, pai: &PaiT) -> Option<Agari> {
         let player = &self.players[winner_idx];
         let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
@@ -518,7 +626,10 @@ impl GameStateT {
             .map(|m| m.pack())
             .collect();
 
-        let all_mentsu = all_of_mentsu(&mut state, fulo.len());
+        let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
+        if fulo.len() == 0 {
+            all_mentsu.extend(all_of_chiitoitsu(&state));
+        }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &pai.pack());
 
         if all_mentsu_w_machi.is_empty() {
@@ -529,12 +640,12 @@ impl GameStateT {
 
         match best_agari {
             Ok(mut agari) if agari.score > 0 => {
-                 let is_oya = winner_idx as u32 == self.oya;
+                let is_oya = winner_idx as u32 == self.oya;
                 if is_oya {
                     agari.score = ((agari.score as f32 * 1.5).ceil() as i32 + 99) / 100 * 100;
                 }
                 Some(agari)
-            },
+            }
             _ => None,
         }
     }
@@ -544,8 +655,9 @@ impl GameStateT {
         for i in 0..self.player_len as usize {
             for j in 0..self.players[i].mentsu_len as usize {
                 let m = &self.players[i].mentsu[j];
-                if m.mentsu_type == MentsuType::TYPE_ANKAN ||
-                   m.mentsu_type == MentsuType::TYPE_MINKAN {
+                if m.mentsu_type == MentsuType::TYPE_ANKAN
+                    || m.mentsu_type == MentsuType::TYPE_MINKAN
+                {
                     count += 1;
                 }
             }
@@ -572,8 +684,15 @@ impl GameStateT {
         Ok(())
     }
 
-    pub fn operate_fulo(&mut self, play_log: &mut PlayLog, player_idx: usize, mentsu: MentsuT) -> anyhow::Result<()> {
-        let discarder_idx = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
+    /// 副露（ポン、チー、明カン）を実行します。河から牌を取得し、面子を構築し、手番を更新します。
+    pub fn operate_fulo(
+        &mut self,
+        play_log: &mut PlayLog,
+        player_idx: usize,
+        mentsu: MentsuT,
+    ) -> anyhow::Result<()> {
+        let discarder_idx =
+            (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
         let discarder = &mut self.players[discarder_idx];
         if discarder.kawahai_len > 0 {
             discarder.kawahai[discarder.kawahai_len as usize - 1].is_nakare = true;
@@ -590,9 +709,12 @@ impl GameStateT {
         }
 
         for &t in &tiles_to_remove {
-            if let Some(pos) = player.tehai[0..player.tehai_len as usize].iter().position(|p| p.pai_num == t) {
+            if let Some(pos) = player.tehai[0..player.tehai_len as usize]
+                .iter()
+                .position(|p| p.pai_num == t)
+            {
                 for j in pos..(player.tehai_len as usize - 1) {
-                    player.tehai[j] = player.tehai[j+1].clone();
+                    player.tehai[j] = player.tehai[j + 1].clone();
                 }
                 player.tehai_len -= 1;
             } else {
@@ -606,9 +728,9 @@ impl GameStateT {
         self.teban = player_idx as u32;
 
         if mentsu.mentsu_type == MentsuType::TYPE_MINKAN {
-             self.rinshan_tsumo(play_log, player_idx)?;
+            self.rinshan_tsumo(play_log, player_idx)?;
         } else {
-             self.players[player_idx].is_tsumo = false;
+            self.players[player_idx].is_tsumo = false;
         }
 
         play_log.append_actions_log(
@@ -623,20 +745,29 @@ impl GameStateT {
         Ok(())
     }
 
-    pub fn operate_ankan(&mut self, play_log: &mut PlayLog, player_idx: usize, mentsu: MentsuT) -> anyhow::Result<()> {
+    /// 暗カンを実行します。手牌から4枚を除去し、暗カン面子を作成します。ドラも増やします。
+    pub fn operate_ankan(
+        &mut self,
+        play_log: &mut PlayLog,
+        player_idx: usize,
+        mentsu: MentsuT,
+    ) -> anyhow::Result<()> {
         let player = &mut self.players[player_idx];
         let mut tiles_to_remove = Vec::new();
         for i in 0..4 {
-             tiles_to_remove.push(mentsu.pai_list[i].pai_num);
+            tiles_to_remove.push(mentsu.pai_list[i].pai_num);
         }
 
         for &t in &tiles_to_remove {
             if player.is_tsumo && player.tsumohai.pai_num == t {
                 player.is_tsumo = false;
                 player.tsumohai = Default::default();
-            } else if let Some(pos) = player.tehai[0..player.tehai_len as usize].iter().position(|p| p.pai_num == t) {
+            } else if let Some(pos) = player.tehai[0..player.tehai_len as usize]
+                .iter()
+                .position(|p| p.pai_num == t)
+            {
                 for j in pos..(player.tehai_len as usize - 1) {
-                    player.tehai[j] = player.tehai[j+1].clone();
+                    player.tehai[j] = player.tehai[j + 1].clone();
                 }
                 player.tehai_len -= 1;
             } else {
@@ -664,16 +795,25 @@ impl GameStateT {
         Ok(())
     }
 
-    pub fn operate_kakan(&mut self, play_log: &mut PlayLog, player_idx: usize, mentsu: MentsuT) -> anyhow::Result<()> {
+    /// 加カンを実行します。既存のポン面子に牌を加え、加カン面子に変更します。
+    pub fn operate_kakan(
+        &mut self,
+        play_log: &mut PlayLog,
+        player_idx: usize,
+        mentsu: MentsuT,
+    ) -> anyhow::Result<()> {
         let player = &mut self.players[player_idx];
         let added_tile = mentsu.pai_list[3].pai_num;
 
         if player.is_tsumo && player.tsumohai.pai_num == added_tile {
             player.is_tsumo = false;
             player.tsumohai = Default::default();
-        } else if let Some(pos) = player.tehai[0..player.tehai_len as usize].iter().position(|p| p.pai_num == added_tile) {
+        } else if let Some(pos) = player.tehai[0..player.tehai_len as usize]
+            .iter()
+            .position(|p| p.pai_num == added_tile)
+        {
             for j in pos..(player.tehai_len as usize - 1) {
-                player.tehai[j] = player.tehai[j+1].clone();
+                player.tehai[j] = player.tehai[j + 1].clone();
             }
             player.tehai_len -= 1;
         } else {
@@ -712,9 +852,11 @@ impl GameStateT {
         Ok(())
     }
 
+    /// チーが可能かどうかを判定し、可能な面子候補のリストを返します。
     pub fn check_chii(&self, player_idx: usize, pai: &PaiT) -> Vec<MentsuT> {
         let mut res = Vec::new();
-        // Since teban has advanced, we check if player is teban (meaning they are next, so discard was from kamicha)
+        // Since teban has advanced (after sutehai), teban indicates the next player's turn.
+        // Chii can only be done by the next player (kamicha discarded).
         if player_idx != self.teban as usize {
             return res;
         }
@@ -726,48 +868,116 @@ impl GameStateT {
         let n = pai.pai_num;
         let num = n % 9;
 
+        if player.is_riichi {
+            return res;
+        }
+
         let find = |target: u8| -> Option<usize> {
-            player.tehai[0..player.tehai_len as usize].iter().position(|p| p.pai_num == target)
+            player.tehai[0..player.tehai_len as usize]
+                .iter()
+                .position(|p| p.pai_num == target)
         };
 
         if num >= 2 {
             if let (Some(i1), Some(i2)) = (find(n - 2), find(n - 1)) {
-                let p1 = MentsuPaiT { pai_num: player.tehai[i1].pai_num, id: player.tehai[i1].id, flag: MentsuFlag::FLAG_NONE };
-                let p2 = MentsuPaiT { pai_num: player.tehai[i2].pai_num, id: player.tehai[i2].id, flag: MentsuFlag::FLAG_NONE };
-                let p3 = MentsuPaiT { pai_num: pai.pai_num, id: pai.id, flag: MentsuFlag::FLAG_KAMICHA };
-                let p4 = MentsuPaiT { pai_num: 0, id: 0, flag: MentsuFlag::FLAG_NONE };
-                res.push(MentsuT { pai_list: [p1, p2, p3, p4], pai_len: 3, mentsu_type: MentsuType::TYPE_SHUNTSU });
+                let p1 = MentsuPaiT {
+                    pai_num: player.tehai[i1].pai_num,
+                    id: player.tehai[i1].id,
+                    flag: MentsuFlag::FLAG_NONE,
+                };
+                let p2 = MentsuPaiT {
+                    pai_num: player.tehai[i2].pai_num,
+                    id: player.tehai[i2].id,
+                    flag: MentsuFlag::FLAG_NONE,
+                };
+                let p3 = MentsuPaiT {
+                    pai_num: pai.pai_num,
+                    id: pai.id,
+                    flag: MentsuFlag::FLAG_KAMICHA,
+                };
+                let p4 = MentsuPaiT {
+                    pai_num: 0,
+                    id: 0,
+                    flag: MentsuFlag::FLAG_NONE,
+                };
+                res.push(MentsuT {
+                    pai_list: [p1, p2, p3, p4],
+                    pai_len: 3,
+                    mentsu_type: MentsuType::TYPE_SHUNTSU,
+                });
             }
         }
 
         if num >= 1 && num <= 7 {
             if let (Some(i1), Some(i2)) = (find(n - 1), find(n + 1)) {
-                let p1 = MentsuPaiT { pai_num: player.tehai[i1].pai_num, id: player.tehai[i1].id, flag: MentsuFlag::FLAG_NONE };
-                let p2 = MentsuPaiT { pai_num: player.tehai[i2].pai_num, id: player.tehai[i2].id, flag: MentsuFlag::FLAG_NONE };
-                let p3 = MentsuPaiT { pai_num: pai.pai_num, id: pai.id, flag: MentsuFlag::FLAG_KAMICHA };
-                let p4 = MentsuPaiT { pai_num: 0, id: 0, flag: MentsuFlag::FLAG_NONE };
-                res.push(MentsuT { pai_list: [p1, p2, p3, p4], pai_len: 3, mentsu_type: MentsuType::TYPE_SHUNTSU });
+                let p1 = MentsuPaiT {
+                    pai_num: player.tehai[i1].pai_num,
+                    id: player.tehai[i1].id,
+                    flag: MentsuFlag::FLAG_NONE,
+                };
+                let p2 = MentsuPaiT {
+                    pai_num: player.tehai[i2].pai_num,
+                    id: player.tehai[i2].id,
+                    flag: MentsuFlag::FLAG_NONE,
+                };
+                let p3 = MentsuPaiT {
+                    pai_num: pai.pai_num,
+                    id: pai.id,
+                    flag: MentsuFlag::FLAG_KAMICHA,
+                };
+                let p4 = MentsuPaiT {
+                    pai_num: 0,
+                    id: 0,
+                    flag: MentsuFlag::FLAG_NONE,
+                };
+                res.push(MentsuT {
+                    pai_list: [p1, p2, p3, p4],
+                    pai_len: 3,
+                    mentsu_type: MentsuType::TYPE_SHUNTSU,
+                });
             }
         }
 
         if num <= 6 {
             if let (Some(i1), Some(i2)) = (find(n + 1), find(n + 2)) {
-                let p1 = MentsuPaiT { pai_num: player.tehai[i1].pai_num, id: player.tehai[i1].id, flag: MentsuFlag::FLAG_NONE };
-                let p2 = MentsuPaiT { pai_num: player.tehai[i2].pai_num, id: player.tehai[i2].id, flag: MentsuFlag::FLAG_NONE };
-                let p3 = MentsuPaiT { pai_num: pai.pai_num, id: pai.id, flag: MentsuFlag::FLAG_KAMICHA };
-                let p4 = MentsuPaiT { pai_num: 0, id: 0, flag: MentsuFlag::FLAG_NONE };
-                res.push(MentsuT { pai_list: [p1, p2, p3, p4], pai_len: 3, mentsu_type: MentsuType::TYPE_SHUNTSU });
+                let p1 = MentsuPaiT {
+                    pai_num: player.tehai[i1].pai_num,
+                    id: player.tehai[i1].id,
+                    flag: MentsuFlag::FLAG_NONE,
+                };
+                let p2 = MentsuPaiT {
+                    pai_num: player.tehai[i2].pai_num,
+                    id: player.tehai[i2].id,
+                    flag: MentsuFlag::FLAG_NONE,
+                };
+                let p3 = MentsuPaiT {
+                    pai_num: pai.pai_num,
+                    id: pai.id,
+                    flag: MentsuFlag::FLAG_KAMICHA,
+                };
+                let p4 = MentsuPaiT {
+                    pai_num: 0,
+                    id: 0,
+                    flag: MentsuFlag::FLAG_NONE,
+                };
+                res.push(MentsuT {
+                    pai_list: [p1, p2, p3, p4],
+                    pai_len: 3,
+                    mentsu_type: MentsuType::TYPE_SHUNTSU,
+                });
             }
         }
 
         res
     }
 
+    /// ポンが可能かどうかを判定し、可能な面子候補のリストを返します。
     pub fn check_pon(&self, player_idx: usize, pai: &PaiT) -> Vec<MentsuT> {
         let mut res = Vec::new();
         // Updated logic: Teban has advanced, so player CAN be teban (actually must be for Pon usually? No, Pon can be anyone usually except discarder)
         // Discarder = teban-1. Player != Discarder.
-        let discarder = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
+        let discarder =
+            (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
         if player_idx == discarder {
             return res;
         }
@@ -776,7 +986,14 @@ impl GameStateT {
         let mut count = 0;
         let mut idxs = Vec::new();
 
-        for (i, p) in player.tehai[0..player.tehai_len as usize].iter().enumerate() {
+        if player.is_riichi {
+            return res;
+        }
+
+        for (i, p) in player.tehai[0..player.tehai_len as usize]
+            .iter()
+            .enumerate()
+        {
             if p.pai_num == pai.pai_num {
                 count += 1;
                 idxs.push(i);
@@ -792,19 +1009,41 @@ impl GameStateT {
                 _ => MentsuFlag::FLAG_NONE,
             };
 
-            let p1 = MentsuPaiT { pai_num: player.tehai[idxs[0]].pai_num, id: player.tehai[idxs[0]].id, flag: MentsuFlag::FLAG_NONE };
-            let p2 = MentsuPaiT { pai_num: player.tehai[idxs[1]].pai_num, id: player.tehai[idxs[1]].id, flag: MentsuFlag::FLAG_NONE };
-            let p3 = MentsuPaiT { pai_num: pai.pai_num, id: pai.id, flag: flag };
-            let p4 = MentsuPaiT { pai_num: 0, id: 0, flag: MentsuFlag::FLAG_NONE };
-            res.push(MentsuT { pai_list: [p1, p2, p3, p4], pai_len: 3, mentsu_type: MentsuType::TYPE_KOUTSU });
+            let p1 = MentsuPaiT {
+                pai_num: player.tehai[idxs[0]].pai_num,
+                id: player.tehai[idxs[0]].id,
+                flag: MentsuFlag::FLAG_NONE,
+            };
+            let p2 = MentsuPaiT {
+                pai_num: player.tehai[idxs[1]].pai_num,
+                id: player.tehai[idxs[1]].id,
+                flag: MentsuFlag::FLAG_NONE,
+            };
+            let p3 = MentsuPaiT {
+                pai_num: pai.pai_num,
+                id: pai.id,
+                flag: flag,
+            };
+            let p4 = MentsuPaiT {
+                pai_num: 0,
+                id: 0,
+                flag: MentsuFlag::FLAG_NONE,
+            };
+            res.push(MentsuT {
+                pai_list: [p1, p2, p3, p4],
+                pai_len: 3,
+                mentsu_type: MentsuType::TYPE_KOUTSU,
+            });
         }
 
         res
     }
 
+    /// 明カンが可能かどうかを判定し、可能な面子候補のリストを返します。
     pub fn check_minkan(&self, player_idx: usize, pai: &PaiT) -> Vec<MentsuT> {
         let mut res = Vec::new();
-        let discarder = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
+        let discarder =
+            (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
         if player_idx == discarder {
             return res;
         }
@@ -813,7 +1052,14 @@ impl GameStateT {
         let mut count = 0;
         let mut idxs = Vec::new();
 
-        for (i, p) in player.tehai[0..player.tehai_len as usize].iter().enumerate() {
+        if player.is_riichi {
+            return res;
+        }
+
+        for (i, p) in player.tehai[0..player.tehai_len as usize]
+            .iter()
+            .enumerate()
+        {
             if p.pai_num == pai.pai_num {
                 count += 1;
                 idxs.push(i);
@@ -829,16 +1075,37 @@ impl GameStateT {
                 _ => MentsuFlag::FLAG_NONE,
             };
 
-            let p1 = MentsuPaiT { pai_num: player.tehai[idxs[0]].pai_num, id: player.tehai[idxs[0]].id, flag: MentsuFlag::FLAG_NONE };
-            let p2 = MentsuPaiT { pai_num: player.tehai[idxs[1]].pai_num, id: player.tehai[idxs[1]].id, flag: MentsuFlag::FLAG_NONE };
-            let p3 = MentsuPaiT { pai_num: player.tehai[idxs[2]].pai_num, id: player.tehai[idxs[2]].id, flag: MentsuFlag::FLAG_NONE };
-            let p4 = MentsuPaiT { pai_num: pai.pai_num, id: pai.id, flag: flag };
-            res.push(MentsuT { pai_list: [p1, p2, p3, p4], pai_len: 4, mentsu_type: MentsuType::TYPE_MINKAN });
+            let p1 = MentsuPaiT {
+                pai_num: player.tehai[idxs[0]].pai_num,
+                id: player.tehai[idxs[0]].id,
+                flag: MentsuFlag::FLAG_NONE,
+            };
+            let p2 = MentsuPaiT {
+                pai_num: player.tehai[idxs[1]].pai_num,
+                id: player.tehai[idxs[1]].id,
+                flag: MentsuFlag::FLAG_NONE,
+            };
+            let p3 = MentsuPaiT {
+                pai_num: player.tehai[idxs[2]].pai_num,
+                id: player.tehai[idxs[2]].id,
+                flag: MentsuFlag::FLAG_NONE,
+            };
+            let p4 = MentsuPaiT {
+                pai_num: pai.pai_num,
+                id: pai.id,
+                flag: flag,
+            };
+            res.push(MentsuT {
+                pai_list: [p1, p2, p3, p4],
+                pai_len: 4,
+                mentsu_type: MentsuType::TYPE_MINKAN,
+            });
         }
 
         res
     }
 
+    /// 暗カンが可能かどうかを判定し、可能な面子候補のリストを返します。
     pub fn check_ankan(&self, player_idx: usize) -> Vec<MentsuT> {
         let mut res = Vec::new();
         let player = &self.players[player_idx];
@@ -864,17 +1131,38 @@ impl GameStateT {
                 }
 
                 if pais.len() == 4 {
-                    let p1 = MentsuPaiT { pai_num: pais[0].pai_num, id: pais[0].id, flag: MentsuFlag::FLAG_NONE };
-                    let p2 = MentsuPaiT { pai_num: pais[1].pai_num, id: pais[1].id, flag: MentsuFlag::FLAG_NONE };
-                    let p3 = MentsuPaiT { pai_num: pais[2].pai_num, id: pais[2].id, flag: MentsuFlag::FLAG_NONE };
-                    let p4 = MentsuPaiT { pai_num: pais[3].pai_num, id: pais[3].id, flag: MentsuFlag::FLAG_NONE };
-                    res.push(MentsuT { pai_list: [p1, p2, p3, p4], pai_len: 4, mentsu_type: MentsuType::TYPE_ANKAN });
+                    let p1 = MentsuPaiT {
+                        pai_num: pais[0].pai_num,
+                        id: pais[0].id,
+                        flag: MentsuFlag::FLAG_NONE,
+                    };
+                    let p2 = MentsuPaiT {
+                        pai_num: pais[1].pai_num,
+                        id: pais[1].id,
+                        flag: MentsuFlag::FLAG_NONE,
+                    };
+                    let p3 = MentsuPaiT {
+                        pai_num: pais[2].pai_num,
+                        id: pais[2].id,
+                        flag: MentsuFlag::FLAG_NONE,
+                    };
+                    let p4 = MentsuPaiT {
+                        pai_num: pais[3].pai_num,
+                        id: pais[3].id,
+                        flag: MentsuFlag::FLAG_NONE,
+                    };
+                    res.push(MentsuT {
+                        pai_list: [p1, p2, p3, p4],
+                        pai_len: 4,
+                        mentsu_type: MentsuType::TYPE_ANKAN,
+                    });
                 }
             }
         }
         res
     }
 
+    /// 加カンが可能かどうかを判定し、可能な面子候補のリストを返します。
     pub fn check_kakan(&self, player_idx: usize) -> Vec<MentsuT> {
         let mut res = Vec::new();
         let player = &self.players[player_idx];
@@ -896,23 +1184,49 @@ impl GameStateT {
 
         for p in player.tehai[0..player.tehai_len as usize].iter() {
             if let Some((m, tile)) = check_tile(p) {
-                let mut list = [MentsuPaiT::default(), MentsuPaiT::default(), MentsuPaiT::default(), MentsuPaiT::default()];
+                let mut list = [
+                    MentsuPaiT::default(),
+                    MentsuPaiT::default(),
+                    MentsuPaiT::default(),
+                    MentsuPaiT::default(),
+                ];
                 for i in 0..3 {
                     list[i] = m.pai_list[i].clone();
                 }
-                list[3] = MentsuPaiT { pai_num: tile.pai_num, id: tile.id, flag: MentsuFlag::FLAG_NONE };
+                list[3] = MentsuPaiT {
+                    pai_num: tile.pai_num,
+                    id: tile.id,
+                    flag: MentsuFlag::FLAG_NONE,
+                };
 
-                res.push(MentsuT { pai_list: list, pai_len: 4, mentsu_type: MentsuType::TYPE_MINKAN });
+                res.push(MentsuT {
+                    pai_list: list,
+                    pai_len: 4,
+                    mentsu_type: MentsuType::TYPE_MINKAN,
+                });
             }
         }
 
         if let Some((m, tile)) = check_tile(&player.tsumohai) {
-             let mut list = [MentsuPaiT::default(), MentsuPaiT::default(), MentsuPaiT::default(), MentsuPaiT::default()];
-                for i in 0..3 {
-                    list[i] = m.pai_list[i].clone();
-                }
-                list[3] = MentsuPaiT { pai_num: tile.pai_num, id: tile.id, flag: MentsuFlag::FLAG_NONE };
-                res.push(MentsuT { pai_list: list, pai_len: 4, mentsu_type: MentsuType::TYPE_MINKAN });
+            let mut list = [
+                MentsuPaiT::default(),
+                MentsuPaiT::default(),
+                MentsuPaiT::default(),
+                MentsuPaiT::default(),
+            ];
+            for i in 0..3 {
+                list[i] = m.pai_list[i].clone();
+            }
+            list[3] = MentsuPaiT {
+                pai_num: tile.pai_num,
+                id: tile.id,
+                flag: MentsuFlag::FLAG_NONE,
+            };
+            res.push(MentsuT {
+                pai_list: list,
+                pai_len: 4,
+                mentsu_type: MentsuType::TYPE_MINKAN,
+            });
         }
 
         res
@@ -923,6 +1237,40 @@ impl GameStateT {
         play_log.append_nagare_log(self.kyoku_id, String::from("流局"), &score);
     }
 
+    /// 和了者リストと流局状況から、次局への設定・親更新を行います。
+    pub fn next_kyoku(&mut self, agari_players: &[usize], is_ryuukyoku: bool) {
+        if is_ryuukyoku {
+            // 流局時の聴牌判定等は一旦すべて親聴牌（またはノーテン流局）として引数で受け取る
+            // ここでは簡易的に(テンパイ判定が無い場合)親流れとするか、agari_players に oya がいれば連荘とみなす
+            let is_renchan = agari_players.contains(&(self.oya as usize));
+            if is_renchan {
+                self.tsumobou += 1;
+            } else {
+                let prev_oya = self.oya;
+                self.oya = (self.oya + 1) % 4;
+                if self.oya < prev_oya {
+                    self.bakaze += 1;
+                }
+                self.tsumobou += 1; // 流局による親流れは本場を引き継いで加算
+            }
+        } else {
+            // 和了した場合
+            let is_renchan = agari_players.contains(&(self.oya as usize));
+            if is_renchan {
+                self.tsumobou += 1;
+            } else {
+                let prev_oya = self.oya;
+                self.oya = (self.oya + 1) % 4;
+                if self.oya < prev_oya {
+                    self.bakaze += 1;
+                }
+                self.tsumobou = 0; // 和了での親流れは本場リセット
+            }
+        }
+        self.teban = self.oya;
+    }
+
+    /// クライアントからのアクションリクエストを処理し、適切なメソッドを呼び出します。
     pub fn action(
         &mut self,
         play_log: &mut PlayLog,
@@ -933,7 +1281,7 @@ impl GameStateT {
         match action_type {
             ActionType::ACTION_RIICHI => {
                 if player_index == self.teban as usize {
-                    self.sutehai(play_log, param as usize, true);
+                    let _ = self.sutehai(play_log, param as usize, true);
                     Ok(())
                 } else {
                     bail!("not teban")
@@ -948,18 +1296,20 @@ impl GameStateT {
             }
             ActionType::ACTION_SUTEHAI => {
                 if player_index == self.teban as usize {
-                    self.sutehai(play_log, param as usize, false);
+                    let _ = self.sutehai(play_log, param as usize, false);
                     Ok(())
                 } else {
                     bail!("not teban")
                 }
             }
             ActionType::ACTION_CHII => {
-                let discarder = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
+                let discarder =
+                    (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
                 if self.players[discarder].kawahai_len == 0 {
                     bail!("No discard to Chii");
                 }
-                let discard = &self.players[discarder].kawahai[self.players[discarder].kawahai_len as usize - 1];
+                let discard = &self.players[discarder].kawahai
+                    [self.players[discarder].kawahai_len as usize - 1];
                 let cands = self.check_chii(player_index, discard);
                 if (param as usize) < cands.len() {
                     self.operate_fulo(play_log, player_index, cands[param as usize].clone())?;
@@ -969,11 +1319,13 @@ impl GameStateT {
                 Ok(())
             }
             ActionType::ACTION_PON => {
-                let discarder = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
+                let discarder =
+                    (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
                 if self.players[discarder].kawahai_len == 0 {
                     bail!("No discard to Pon");
                 }
-                let discard = &self.players[discarder].kawahai[self.players[discarder].kawahai_len as usize - 1];
+                let discard = &self.players[discarder].kawahai
+                    [self.players[discarder].kawahai_len as usize - 1];
                 let cands = self.check_pon(player_index, discard);
                 if (param as usize) < cands.len() {
                     self.operate_fulo(play_log, player_index, cands[param as usize].clone())?;
@@ -990,17 +1342,23 @@ impl GameStateT {
                     if (param as usize) < ankans.len() {
                         self.operate_ankan(play_log, player_index, ankans[param as usize].clone())?;
                     } else if (param as usize) < ankans.len() + kakans.len() {
-                        self.operate_kakan(play_log, player_index, kakans[param as usize - ankans.len()].clone())?;
+                        self.operate_kakan(
+                            play_log,
+                            player_index,
+                            kakans[param as usize - ankans.len()].clone(),
+                        )?;
                     } else {
                         bail!("Invalid kan param (self)");
                     }
                 } else {
                     // Minkan
-                    let discarder = (self.teban as usize + self.player_len as usize - 1) % self.player_len as usize;
+                    let discarder = (self.teban as usize + self.player_len as usize - 1)
+                        % self.player_len as usize;
                     if self.players[discarder].kawahai_len == 0 {
                         bail!("No discard to Kan");
                     }
-                    let discard = &self.players[discarder].kawahai[self.players[discarder].kawahai_len as usize - 1];
+                    let discard = &self.players[discarder].kawahai
+                        [self.players[discarder].kawahai_len as usize - 1];
                     let cands = self.check_minkan(player_index, discard);
                     if (param as usize) < cands.len() {
                         self.operate_fulo(play_log, player_index, cands[param as usize].clone())?;

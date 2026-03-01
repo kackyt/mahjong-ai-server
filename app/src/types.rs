@@ -15,6 +15,8 @@ pub enum Message {
     Pon,
     Chi,
     Kan,
+    NextHand,
+    BackToTitle,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -34,15 +36,13 @@ impl std::fmt::Display for GameMode {
 }
 
 impl GameMode {
-    pub const ALL: [GameMode; 2] = [
-        GameMode::FourPlayerVsAI,
-        GameMode::OnePlayerSolo,
-    ];
+    pub const ALL: [GameMode; 2] = [GameMode::FourPlayerVsAI, GameMode::OnePlayerSolo];
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AppState {
     Created,
     Started,
-    Ended,
+    HandEnded,    // A single hand (Kyoku) ended
+    GameFinished, // The whole game (Hanchan) ended
 }

@@ -25,13 +25,13 @@ fn parse_testcase(path: &Path) -> io::Result<Vec<(Vec<PaiT>, i32)>> {
                 id: 1,
                 is_tsumogiri: false,
                 is_riichi: false,
-                is_nakare: false
+                is_nakare: false,
             };
 
             pai_array.push(p);
         }
 
-        let min_shanten = numbers[14]; // .min(numbers[15]).min(numbers[16]);
+        let min_shanten = numbers[14].min(numbers[15]).min(numbers[16]);
 
         pai_vec.push((pai_array, min_shanten));
     }

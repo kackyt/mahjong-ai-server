@@ -2,11 +2,15 @@
 mod load_pailist_test {
     use std::path::PathBuf;
 
-    use mahjong_core::{load_pailist, shanten::{PaiState, all_of_mentsu}};
+    use mahjong_core::{
+        load_pailist,
+        shanten::{all_of_mentsu, PaiState},
+    };
 
     #[test]
     fn test_load_pailist() {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/paiyamas-random.parquet");
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/paiyamas-random.parquet");
 
         let ret = load_pailist::load_pailist(path, 0);
 

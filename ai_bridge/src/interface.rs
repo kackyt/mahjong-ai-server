@@ -348,8 +348,13 @@ unsafe fn mjsend_message_impl(
             let all_mentsu = all_of_mentsu(pstate, v_fulo.len());
             let all_of_mentsu_with_agari = add_machi_to_mentsu(&all_mentsu, &agari_pai);
 
-            let result =
-                taku.get_best_agari(taku.teban as usize, &all_of_mentsu_with_agari, &v_fulo, 0, true);
+            let result = taku.get_best_agari(
+                taku.teban as usize,
+                &all_of_mentsu_with_agari,
+                &v_fulo,
+                0,
+                true,
+            );
 
             if let Ok(agari) = result {
                 agari.score.try_into().unwrap()

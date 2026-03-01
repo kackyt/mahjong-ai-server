@@ -8,7 +8,6 @@ use mahjong_core::mahjong_generated::open_mahjong::{
     GameStateT, MentsuFlag, MentsuPaiT, MentsuT, MentsuType, PaiT,
 };
 use std::ffi::c_void;
-
 mod consts;
 
 #[repr(C)]
