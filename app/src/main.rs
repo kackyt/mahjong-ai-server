@@ -52,6 +52,8 @@ struct App {
     can_chi_flag: bool,
     can_kan_flag: bool,
     sutehai: PaiT,
+    last_agari_players: Vec<usize>,
+    is_ryuukyoku: bool,
 }
 
 #[derive(Clone)]
@@ -308,6 +310,8 @@ impl Application for App {
 
                         if is_game_over {
                             self.state = AppState::HandEnded;
+                            self.is_ryuukyoku = true;
+                            self.last_agari_players.clear();
                             self.show_modal("流局");
                         } else {
                             state.tsumo(&mut self.play_log);
@@ -348,6 +352,8 @@ impl Application for App {
                     match result {
                         Ok(agari) => {
                             self.state = AppState::HandEnded;
+                            self.is_ryuukyoku = false;
+                            self.last_agari_players = vec![state.teban as usize];
 
                             self.show_modal(&format!(
                                 "{}\n{}翻\n{}符\n{}点",
@@ -404,6 +410,8 @@ impl Application for App {
                         match agari_r {
                             Ok(agari) => {
                                 self.state = AppState::HandEnded;
+                                self.is_ryuukyoku = false;
+                                self.last_agari_players = vec![state.teban as usize];
 
                                 self.show_modal(&format!(
                                     "{}\n{}翻\n{}符\n{}点",
@@ -450,6 +458,8 @@ impl Application for App {
 
                                 if is_game_over {
                                     self.state = AppState::HandEnded;
+                                    self.is_ryuukyoku = true;
+                                    self.last_agari_players.clear();
                                     self.show_modal("流局");
                                     Command::none()
                                 } else {
@@ -552,6 +562,8 @@ impl Application for App {
 
                 if let Ok(agari) = state.ron_agari(&mut self.play_log, 0, 0, &self.sutehai) {
                     self.state = AppState::HandEnded;
+                    self.is_ryuukyoku = false;
+                    self.last_agari_players = vec![0];
                     self.show_modal(&format!(
                         "RON!\n{}\n{}翻\n{}符\n{}点",
                         yaku_to_string(&agari.yaku),
@@ -656,14 +668,11 @@ impl Application for App {
             Message::NextHand => unsafe {
                 let state = &mut G_STATE;
 
-                // Rotate Oya
-                let prev_oya = state.oya;
-                state.oya = (state.oya + 1) % 4;
-                if state.oya < prev_oya {
-                    state.bakaze += 1;
+                if self.is_ryuukyoku {
+                    state.next_kyoku(&self.last_agari_players, true);
+                } else {
+                    state.next_kyoku(&self.last_agari_players, false);
                 }
-                // honba handling simplification (reset on rotation)
-                state.tsumobou = 0;
 
                 // Check Game Over
                 if state.bakaze > 1 {
@@ -783,6 +792,8 @@ impl Application for App {
                 can_chi_flag: false,
                 can_kan_flag: false,
                 sutehai: PaiT::default(),
+                last_agari_players: Vec::new(),
+                is_ryuukyoku: false,
             },
             load_font,
         )

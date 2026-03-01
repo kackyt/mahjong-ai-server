@@ -171,6 +171,7 @@ impl GameStateT {
         let dt = Utc::now();
         self.kyoku_id = (dt.timestamp() / (24 * 3600) * 100000) as u64;
         let mut kazes = [Some(0), Some(0), Some(0), Some(0)];
+        self.teban = self.oya;
 
         for idx in 0..self.player_len {
             kazes[idx as usize] = Some(self.get_zikaze(idx as usize) as i32);
@@ -1234,6 +1235,39 @@ impl GameStateT {
     pub fn nagare(&mut self, play_log: &mut PlayLog) {
         let score = [Some(-3000), Some(0), Some(0), Some(0)];
         play_log.append_nagare_log(self.kyoku_id, String::from("流局"), &score);
+    }
+
+    /// 和了者リストと流局状況から、次局への設定・親更新を行います。
+    pub fn next_kyoku(&mut self, agari_players: &[usize], is_ryuukyoku: bool) {
+        if is_ryuukyoku {
+            // 流局時の聴牌判定等は一旦すべて親聴牌（またはノーテン流局）として引数で受け取る
+            // ここでは簡易的に(テンパイ判定が無い場合)親流れとするか、agari_players に oya がいれば連荘とみなす
+            let is_renchan = agari_players.contains(&(self.oya as usize));
+            if is_renchan {
+                self.tsumobou += 1;
+            } else {
+                let prev_oya = self.oya;
+                self.oya = (self.oya + 1) % 4;
+                if self.oya < prev_oya {
+                    self.bakaze += 1;
+                }
+                self.tsumobou += 1; // 流局による親流れは本場を引き継いで加算
+            }
+        } else {
+            // 和了した場合
+            let is_renchan = agari_players.contains(&(self.oya as usize));
+            if is_renchan {
+                self.tsumobou += 1;
+            } else {
+                let prev_oya = self.oya;
+                self.oya = (self.oya + 1) % 4;
+                if self.oya < prev_oya {
+                    self.bakaze += 1;
+                }
+                self.tsumobou = 0; // 和了での親流れは本場リセット
+            }
+        }
+        self.teban = self.oya;
     }
 
     /// クライアントからのアクションリクエストを処理し、適切なメソッドを呼び出します。
