@@ -138,7 +138,7 @@ impl Application for App {
 
     fn update(&mut self, event: Message) -> Command<Message> {
         match event {
-            /// ゲームを開始します。
+            // ゲームを開始します。
             Message::Start => unsafe {
                 let state = &mut G_STATE;
                 let sendmes_ptr = mjsend_message as *const ();
@@ -251,6 +251,18 @@ impl Application for App {
                 state.riichibou = 0;
                 state.oya = 0;
 
+                // 各プレイヤーのフラグ・状態クリア
+                for _p in state.players.iter_mut() {
+                    // (PlayerT自体にはcan_ron_flag等のフィールドはないため、GUI側で管理している状態のみを対象とするのが本来の形ですが、
+                    // ここではループ自体が不要なためスキップします。sutahai_len等があればリセットする前提)
+                }
+
+                // グローバル待ちフラグクリア
+                self.can_ron_flag = false;
+                self.can_pon_flag = false;
+                self.can_chi_flag = false;
+                self.can_kan_flag = false;
+
                 // Trigger AI if it's AI's turn (only in 4P Vs AI)
                 let teban = state.teban as usize;
                 if self.game_mode == crate::types::GameMode::FourPlayerVsAI && teban != 0 {
@@ -266,7 +278,7 @@ impl Application for App {
 
                 Command::none()
             },
-            /// プレイヤー（人間）が打牌した時の処理です。
+            // プレイヤー（人間）が打牌した時の処理です。
             Message::Dahai(index) => unsafe {
                 let state = &mut G_STATE;
                 let state_riichi = player_is_riichi(0);
@@ -327,7 +339,7 @@ impl Application for App {
                 }
                 Command::none()
             },
-            /// ツモ和了ボタンが満たされた時の処理です。
+            // ツモ和了ボタンが満たされた時の処理です。
             Message::Tsumo => {
                 unsafe {
                     let state = &mut G_STATE;
@@ -376,7 +388,7 @@ impl Application for App {
                 }
                 Command::none()
             }
-            /// AIからのコマンド（打牌、リーチ、ツモなど）を受信した時の処理です。
+            // AIからのコマンド（打牌、リーチ、ツモなど）を受信した時の処理です。
             Message::AICommand(ret) => unsafe {
                 let index = ret & 0x3F;
                 let flag = ret & 0xFF80;
@@ -533,7 +545,7 @@ impl Application for App {
                     }
                 }
             },
-            /// ロンボタンが押された時の処理です。
+            // ロンボタンが押された時の処理です。
             Message::Ron => unsafe {
                 // Execute Ron
                 let state = &mut G_STATE;
@@ -553,6 +565,12 @@ impl Application for App {
                 Command::none()
             },
             Message::Pass => unsafe {
+                // 即座に関連フラグをクリア
+                self.can_ron_flag = false;
+                self.can_pon_flag = false;
+                self.can_chi_flag = false;
+                self.can_kan_flag = false;
+
                 // Proceed to next turn
                 let state = &mut G_STATE;
                 state.tsumo(&mut self.play_log);
@@ -574,8 +592,14 @@ impl Application for App {
                 }
                 Command::none()
             },
-            /// ポンボタンが押された時の処理です。
+            // ポンボタンが押された時の処理です。
             Message::Pon => {
+                // 即座にフラグをクリア
+                self.can_ron_flag = false;
+                self.can_pon_flag = false;
+                self.can_chi_flag = false;
+                self.can_kan_flag = false;
+
                 unsafe {
                     let state = &mut G_STATE;
                     let cands = state.check_pon(0, &self.sutehai);
@@ -589,8 +613,14 @@ impl Application for App {
                 }
                 Command::none()
             }
-            /// チーボタンが押された時の処理です。
+            // チーボタンが押された時の処理です。
             Message::Chi => {
+                // 即座にフラグをクリア
+                self.can_ron_flag = false;
+                self.can_pon_flag = false;
+                self.can_chi_flag = false;
+                self.can_kan_flag = false;
+
                 unsafe {
                     let state = &mut G_STATE;
                     let cands = state.check_chii(0, &self.sutehai);
@@ -603,8 +633,14 @@ impl Application for App {
                 }
                 Command::none()
             }
-            /// カンボタンが押された時の処理です。
+            // カンボタンが押された時の処理です。
             Message::Kan => {
+                // 即座にフラグをクリア
+                self.can_ron_flag = false;
+                self.can_pon_flag = false;
+                self.can_chi_flag = false;
+                self.can_kan_flag = false;
+
                 unsafe {
                     let state = &mut G_STATE;
                     let cands = state.check_minkan(0, &self.sutehai);
@@ -616,7 +652,7 @@ impl Application for App {
                 }
                 Command::none()
             }
-            /// 次の局へ進む処理（Next Handボタン）です。親の交代やゲーム終了判定も行います。
+            // 次の局へ進む処理（Next Handボタン）です。親の交代やゲーム終了判定も行います。
             Message::NextHand => unsafe {
                 let state = &mut G_STATE;
 
@@ -658,6 +694,11 @@ impl Application for App {
                     Command::none()
                 } else {
                     // Start Next Hand
+                    self.can_ron_flag = false;
+                    self.can_pon_flag = false;
+                    self.can_chi_flag = false;
+                    self.can_kan_flag = false;
+
                     state.start(&mut self.play_log);
                     // Oya needs to draw the 14th tile
                     state.tsumo(&mut self.play_log);
@@ -670,6 +711,7 @@ impl Application for App {
             },
             Message::BackToTitle => {
                 self.state = AppState::Created;
+                self.is_show_modal = false;
                 Command::none()
             }
         }

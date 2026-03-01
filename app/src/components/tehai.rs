@@ -41,7 +41,7 @@ pub fn view<'a>(
             image(mk_img(back_idx)).into()
         } else if is_interactive {
             button(image(mk_img(tsumohai.pai_num as u32)))
-                .on_press(Message::Dahai(13))
+                .on_press(Message::Dahai(tehai_len))
                 .padding(0)
                 .into()
         } else {

@@ -269,6 +269,7 @@ mod tests {
                 &all_mentsu_w_machi,
                 &parquet.fulo,
                 parquet.nukidora as usize,
+                false,
             )
             .unwrap();
 

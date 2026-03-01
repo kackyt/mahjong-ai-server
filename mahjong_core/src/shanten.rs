@@ -545,7 +545,7 @@ pub fn all_of_chiitoitsu(pai_state: &PaiState) -> Vec<Vec<Mentsu>> {
     let mut vector = Vec::new();
 
     let mut add_pair = |suit: usize, num: usize, count: i32| {
-        let pairs = count / 2;
+        let pairs = if count >= 2 { 1 } else { 0 };
         for _ in 0..pairs {
             let base = match suit {
                 0 => num,

@@ -1,5 +1,4 @@
 use iced::widget::image;
-use std::env;
 
 pub fn get(pai_num: u32, angle: u16, _is_red: bool) -> image::Handle {
     // Red tile logic if needed (passing is_red, but file naming might be different)

@@ -262,7 +262,7 @@ impl GameStateT {
     }
 
     /// 牌を捨てます。立直判定や一発の解除、河への追加を行います。
-    /// TODO: 鳴きが考慮されていないので追加する
+    /// TODO: 副露対応を捨て牌処理に実装する（後日Issue化）
     ///
     /// # Arguments
     /// * `play_log` - ログ
@@ -278,14 +278,14 @@ impl GameStateT {
 
         let tehai_len = player.tehai_len as usize;
 
-        // ツモ切りの判定: indexがtehai_len以上
-        let is_tsumogiri = index >= tehai_len;
+        // ツモ切りの判定: indexがtehai_lenと等しい
+        let is_tsumogiri = index == tehai_len;
 
         // 手出しの判定: indexがtehai_len未満の場合
         let is_tedashi = index < tehai_len;
 
         // インデックスの正当性チェック
-        ensure!(is_tsumogiri || is_tedashi, "Invalid discard index");
+        ensure!(index <= tehai_len, "Invalid discard index");
 
         // 副露後のチェック: is_tsumoがfalseの場合、ツモ切りはできない
         if !player.is_tsumo {
@@ -854,7 +854,8 @@ impl GameStateT {
     /// チーが可能かどうかを判定し、可能な面子候補のリストを返します。
     pub fn check_chii(&self, player_idx: usize, pai: &PaiT) -> Vec<MentsuT> {
         let mut res = Vec::new();
-        // Since teban has advanced, we check if player is teban (meaning they are next, so discard was from kamicha)
+        // Since teban has advanced (after sutehai), teban indicates the next player's turn.
+        // Chii can only be done by the next player (kamicha discarded).
         if player_idx != self.teban as usize {
             return res;
         }

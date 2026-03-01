@@ -230,58 +230,55 @@ impl ParquetAgari {
 pub fn load_pailist<P: AsRef<Path>>(path: P, row_index: usize) -> anyhow::Result<Vec<u32>> {
     let file = File::open(path)?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-    let mut reader = builder.build()?;
-    let read_result = reader.next();
+    let reader = builder.build()?;
+    let mut current_offset = 0;
 
-    if let Some(arrow_result) = read_result {
-        let record_batch = arrow_result?;
-        if let Some(column) = record_batch.column_by_name("pai_ids") {
-            let row_list = column.as_any().downcast_ref::<FixedSizeListArray>();
+    for read_result in reader {
+        let record_batch = read_result?;
+        let batch_len = record_batch.num_rows();
 
-            if let Some(rows) = row_list {
-                ensure!(
-                    row_index < rows.len(),
-                    "row_index must be less than row length"
-                );
-                let cell = rows.value(row_index);
-                let ret = cell.as_any().downcast_ref::<UInt32Array>();
+        if row_index >= current_offset && row_index < current_offset + batch_len {
+            let local_row_index = row_index - current_offset;
 
-                if let Some(row) = ret {
-                    let values = row.values().to_vec();
-
-                    return Ok(values);
+            if let Some(column) = record_batch.column_by_name("pai_ids") {
+                if let Some(row_list) = column.as_any().downcast_ref::<FixedSizeListArray>() {
+                    let cell = row_list.value(local_row_index);
+                    if let Some(row) = cell.as_any().downcast_ref::<UInt32Array>() {
+                        return Ok(row.values().to_vec());
+                    } else {
+                        anyhow::bail!("cannot read cell data");
+                    }
                 } else {
-                    ensure!(false, "cannot read cell data");
+                    anyhow::bail!("cannot read columns by list");
                 }
             } else {
-                ensure!(false, "cannot read columns by list");
+                anyhow::bail!("cannot load pai_ids column");
             }
-        } else {
-            ensure!(false, "cannot load pai_ids column");
         }
-    } else {
-        ensure!(false, "cannot load parquet record");
+        current_offset += batch_len;
     }
 
-    Ok(vec![])
+    anyhow::bail!("row_index {} is out of bounds", row_index);
 }
 
 pub fn load_agari_tehai<P: AsRef<Path>>(path: P, row_index: usize) -> anyhow::Result<ParquetAgari> {
     let file = File::open(path)?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-    let mut reader = builder.build()?;
-    let read_result = reader.next();
+    let reader = builder.build()?;
     let mut ret = ParquetAgari::default();
+    let mut current_offset = 0;
 
-    if let Some(arrow_result) = read_result {
-        let record_batch = arrow_result?;
+    for read_result in reader {
+        let record_batch = read_result?;
+        let batch_len = record_batch.num_rows();
 
-        ret.get_row_with_types(&record_batch, row_index);
-
-        return Ok(ret);
-    } else {
-        ensure!(false, "cannot load parquet record");
+        if row_index >= current_offset && row_index < current_offset + batch_len {
+            let local_row_index = row_index - current_offset;
+            ret.get_row_with_types(&record_batch, local_row_index);
+            return Ok(ret);
+        }
+        current_offset += batch_len;
     }
 
-    Ok(ret)
+    anyhow::bail!("row_index {} is out of bounds", row_index);
 }

@@ -31,6 +31,9 @@ mod tests {
         // Setup P0 Hand: 1m, 1m, 2m, 3m...
         // P0 has pair of 1m.
         let mut p0 = state.players[0].clone();
+        for i in 0..13 {
+            p0.tehai[i] = create_pai(0, 0); // 仮で全て1m(id=0)に初期化
+        }
         p0.tehai[0] = create_pai(0, 0); // 1m
         p0.tehai[1] = create_pai(0, 1); // 1m
         p0.tehai_len = 13;
@@ -39,6 +42,10 @@ mod tests {
         // P3 Discards 1m (id 2)
         state.teban = 3;
         let mut p3 = state.players[3].clone();
+        for i in 0..13 {
+            p3.tehai[i] = create_pai(0, 0);
+        }
+        p3.tehai_len = 13;
         p3.tsumohai = create_pai(0, 2);
         p3.is_tsumo = true;
         state.players[3] = p3;
@@ -88,6 +95,10 @@ mod tests {
 
         // Setup P0 Hand: 2m, 3m...
         let mut p0 = state.players[0].clone();
+        for i in 0..13 {
+            p0.tehai[i] = create_pai(33, 0); // 関係ない牌(中など)で初期化
+        }
+        p0.tehai_len = 13;
         p0.tehai[0] = create_pai(1, 0); // 2m
         p0.tehai[1] = create_pai(2, 0); // 3m
         state.players[0] = p0;
@@ -95,6 +106,10 @@ mod tests {
         // P3 discards 1m
         state.teban = 3;
         let mut p3 = state.players[3].clone();
+        for i in 0..13 {
+            p3.tehai[i] = create_pai(33, 0);
+        }
+        p3.tehai_len = 13;
         p3.tsumohai = create_pai(0, 0); // 1m
         p3.is_tsumo = true;
         state.players[3] = p3;
@@ -114,6 +129,10 @@ mod tests {
         // Setup P2 discards 1m (Kamicha of Kamicha -> Toimen of P0)
         state.teban = 2;
         let mut p2 = state.players[2].clone();
+        for i in 0..13 {
+            p2.tehai[i] = create_pai(33, 0);
+        }
+        p2.tehai_len = 13;
         p2.tsumohai = create_pai(0, 1); // 1m
         p2.is_tsumo = true;
         state.players[2] = p2;

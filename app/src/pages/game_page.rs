@@ -25,10 +25,19 @@ pub fn view<'a>(
 
         let isnt_riichi = !core_state.players[0].is_riichi;
         let shanten = {
-            let mut tehai: Vec<mahjong_core::mahjong_generated::open_mahjong::PaiT> =
-                core_state.players[0].tehai.iter().cloned().collect();
-            tehai.push(core_state.players[0].tsumohai.clone());
-            mahjong_core::shanten::PaiState::from(&tehai).get_shanten(0)
+            // tehaiから有効な牌のみ抽出し、副露数を計算
+            let valid_tehai: Vec<_> = core_state.players[0]
+                .tehai
+                .iter()
+                .filter(|p| p.pai_num < 34)
+                .cloned()
+                .collect();
+            let mut all_pai = valid_tehai.clone();
+            if core_state.players[0].is_tsumo && core_state.players[0].tsumohai.pai_num < 34 {
+                all_pai.push(core_state.players[0].tsumohai.clone());
+            }
+            let open_meld_count = core_state.players[0].mentsu_len as usize;
+            mahjong_core::shanten::PaiState::from(&all_pai).get_shanten(open_meld_count)
         };
 
         let dora_elem = dora::view(
@@ -42,15 +51,6 @@ pub fn view<'a>(
         if player_len == 4 {
             let p0 = &core_state.players[0];
             let bakaze = core_state.bakaze;
-            let kyoku = core_state.kyoku_id; // Using kyoku_id as Kyoku number? No, kyoku_id is timestamp.
-                                             // core_state doesn't seem to track 'East 1 Bureau' as a simple number pair in exposed fields easily?
-                                             // Actually 'bakaze' is there. 'kyoku_id' is NOT the bureau number.
-                                             // Looking at main.rs previously check:
-                                             // self.kyoku = 1; ... self.kyoku = self.oya + 1;
-                                             // G_STATE doesn't have 'kyoku' (bureau number). It has 'oya' and 'bakaze'.
-                                             // Bureau number is roughly oya + 1?
-                                             // In 4-player, Oya rotates 0->1->2->3.
-                                             // If Oya is 0, it's East 1. If 1, East 2.
             let kyoku_display = core_state.oya + 1;
             let honba = core_state.tsumobou;
             let riichibou = core_state.riichibou;

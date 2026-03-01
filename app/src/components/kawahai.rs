@@ -33,6 +33,7 @@ pub fn view<'a>(kawahai: &[PaiT], kawahai_len: usize) -> Element<'a, Message> {
 
     let mut images: Vec<Element<'a, Message>> = Vec::new();
 
+    // UIレイアウトのズレを防ぐため、先頭に透明なプレースホルダー画像(pai_num=99)を配置
     images.push(container(image(images::get(99, 0, false)).height(Length::Fixed(38.0))).into());
 
     for pai in kawahai.iter().take(kawahai_len) {
