@@ -68,7 +68,7 @@ fn calculate_discard(tehai: &[u8]) -> Option<usize> {
 
 #[wasm_bindgen]
 pub fn get_shanten(tehai: &[u8]) -> i32 {
-    let mut pai_list: Vec<PaiT> = Vec::new();
+    let mut pai_list: Vec<PaiT> = Vec::with_capacity(tehai.len());
     for &pai_num in tehai {
         let mut pai = PaiT::default();
         pai.pai_num = pai_num;

@@ -536,8 +536,6 @@ impl PaiState {
 pub fn all_of_chiitoitsu(pai_state: &PaiState) -> Vec<Vec<Mentsu>> {
     let mut mentsu_list = Vec::new();
     // Check if we have 7 pairs
-    let mut n_toitsu = 0;
-
     // Check counts
     // logic: iterate all, if >=2, add as pair
     // Note: 4 cards = 2 pairs

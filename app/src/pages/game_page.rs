@@ -82,7 +82,7 @@ pub fn view<'a>(
                             text_style(&format!(
                                 "Player {} ({})",
                                 *i + 1,
-                                get_wind_name(*i as u32)
+                                get_wind_name((*i as u32 + 4 - oya) % 4)
                             )),
                             oya_marker(oya == (*i) as u32),
                             score_style(&format!("{}点", player.score))

@@ -14,16 +14,14 @@ pub fn view<'a>(
     is_interactive: bool,
     is_opponent: bool,
 ) -> Element<'a, Message> {
-    let back_idx = 99;
-
-    let mk_img = |pai_num: u32| images::get(pai_num, 0, false);
+    let mk_img = |pai_num: u32| images::get(pai_num, 0);
 
     let mut ui_tehai: Vec<Element<'a, Message>> = tehai[0..tehai_len]
         .iter()
         .enumerate()
         .map(|(index, pai)| {
             if is_opponent {
-                image(mk_img(back_idx)).into()
+                image(mk_img(images::BACK_TILE_NUM)).into()
             } else if is_interactive {
                 button(image(mk_img(pai.pai_num as u32)))
                     .on_press(Message::Dahai(index))
@@ -38,7 +36,7 @@ pub fn view<'a>(
     if is_tsumo {
         ui_tehai.push(Space::new(10, 10).into()); // Generic spacing
         let img = if is_opponent {
-            image(mk_img(back_idx)).into()
+            image(mk_img(images::BACK_TILE_NUM)).into()
         } else if is_interactive {
             button(image(mk_img(tsumohai.pai_num as u32)))
                 .on_press(Message::Dahai(tehai_len))

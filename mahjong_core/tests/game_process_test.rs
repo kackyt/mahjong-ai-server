@@ -27,7 +27,7 @@ fn game_start_test() {
     assert_eq!(player.tehai_len, 13);
     assert_ne!(player.tsumohai, PaiT::default());
 
-    state.sutehai(&mut play_log, 10, false);
+    let _ = state.sutehai(&mut play_log, 10, false);
     assert!(state.tsumo(&mut play_log).is_ok(), "ツモ失敗");
 
     player = state.get_player(0);

@@ -1,31 +1,43 @@
 use iced::widget::image;
+use std::cell::RefCell;
+use std::collections::HashMap;
 
-pub fn get(pai_num: u32, angle: u16, _is_red: bool) -> image::Handle {
-    // Red tile logic if needed (passing is_red, but file naming might be different)
-    // For now, let's assume standard names or handle 'red' suffix if passed.
-    // The original utils::painum2path handled standard lookup.
-    // We need rotated variants.
+pub const BACK_TILE_NUM: u32 = 99;
 
-    if pai_num == 99 {
-        return image::Handle::from_path(format!(
-            "{}/images/haiga/transparent.gif",
-            env!("CARGO_MANIFEST_DIR")
-        ));
-    }
+thread_local! {
+    static CACHE: RefCell<HashMap<(u32, u16), image::Handle>> = RefCell::new(HashMap::new());
+}
 
-    let prefix = match angle {
-        90 => "ty",
-        180 => "t",
-        270 => "y",
-        _ => "",
-    };
+pub fn get(pai_num: u32, angle: u16) -> image::Handle {
+    CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if let Some(handle) = cache.get(&(pai_num, angle)) {
+            return handle.clone();
+        }
 
-    // Reuse strict logic from utils, but adapted for rotation prefixes
-    let name = get_tile_name(pai_num);
-    let filename = format!("{}{}.gif", prefix, name);
-    let path = format!("{}/images/haiga/{}", env!("CARGO_MANIFEST_DIR"), filename);
+        let handle = if pai_num == BACK_TILE_NUM {
+            image::Handle::from_path(format!(
+                "{}/images/haiga/transparent.gif",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+        } else {
+            let prefix = match angle {
+                90 => "ty",
+                180 => "t",
+                270 => "y",
+                _ => "",
+            };
 
-    image::Handle::from_path(path)
+            let name = get_tile_name(pai_num);
+            let filename = format!("{}{}.gif", prefix, name);
+            let path = format!("{}/images/haiga/{}", env!("CARGO_MANIFEST_DIR"), filename);
+
+            image::Handle::from_path(path)
+        };
+
+        cache.insert((pai_num, angle), handle.clone());
+        handle
+    })
 }
 
 fn get_tile_name(pai_num: u32) -> String {

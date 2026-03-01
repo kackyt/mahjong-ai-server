@@ -283,7 +283,7 @@ impl GameStateT {
         let is_tsumogiri = index == tehai_len;
 
         // 手出しの判定: indexがtehai_len未満の場合
-        let is_tedashi = index < tehai_len;
+        let _is_tedashi = index < tehai_len;
 
         // インデックスの正当性チェック
         ensure!(index <= tehai_len, "Invalid discard index");
@@ -1281,7 +1281,7 @@ impl GameStateT {
         match action_type {
             ActionType::ACTION_RIICHI => {
                 if player_index == self.teban as usize {
-                    self.sutehai(play_log, param as usize, true);
+                    let _ = self.sutehai(play_log, param as usize, true);
                     Ok(())
                 } else {
                     bail!("not teban")
@@ -1296,7 +1296,7 @@ impl GameStateT {
             }
             ActionType::ACTION_SUTEHAI => {
                 if player_index == self.teban as usize {
-                    self.sutehai(play_log, param as usize, false);
+                    let _ = self.sutehai(play_log, param as usize, false);
                     Ok(())
                 } else {
                     bail!("not teban")

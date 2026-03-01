@@ -1,6 +1,6 @@
 use std::{fs::File, path::Path};
 
-use anyhow::ensure;
+use anyhow::{ensure, Context};
 use arrow_array::{
     array::Int32Array, Array, FixedSizeListArray, ListArray, RecordBatch, StringArray, StructArray,
     UInt32Array,
@@ -108,122 +108,159 @@ impl ParquetAgari {
         }
     }
 
-    pub fn get_row_with_types(&mut self, record_batch: &RecordBatch, row_index: usize) {
-        record_batch
-            .columns()
-            .iter()
-            .enumerate()
-            .for_each(|(i, column)| {
-                let binding = record_batch.schema();
-                let field = binding.field(i);
-                let name = field.name();
+    pub fn get_row_with_types(
+        &mut self,
+        record_batch: &RecordBatch,
+        row_index: usize,
+    ) -> anyhow::Result<()> {
+        for (i, column) in record_batch.columns().iter().enumerate() {
+            let binding = record_batch.schema();
+            let field = binding.field(i);
+            let name = field.name();
 
-                if name == &String::from("tehai") {
-                    let string_array = column.as_any().downcast_ref::<StringArray>().unwrap();
-                    let cell = string_array.value(row_index);
-                    self.parse_tehai_string(cell);
+            if name == "tehai" {
+                let string_array = column
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .context("tehai column is not StringArray")?;
+                let cell = string_array.value(row_index);
+                self.parse_tehai_string(cell);
+            }
+
+            if name == "fu" {
+                let int_array = column
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .context("fu column is not Int32Array")?;
+                self.fu = int_array.value(row_index);
+            }
+
+            if name == "yaku" {
+                let string_array = column
+                    .as_any()
+                    .downcast_ref::<ListArray>()
+                    .context("yaku column is not ListArray")?;
+                let cell = string_array.value(row_index);
+
+                let yaku_array = cell
+                    .as_any()
+                    .downcast_ref::<StructArray>()
+                    .context("yaku cell is not StructArray")?;
+
+                let yaku_names = yaku_array
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .context("yaku_names column is not StringArray")?;
+                let yaku_hans = yaku_array
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .context("yaku_hans column is not Int32Array")?;
+
+                for i in 0..yaku_array.len() {
+                    let yaku_name = yaku_names.value(i);
+                    let yaku_han = yaku_hans.value(i);
+
+                    self.yaku.push((String::from(yaku_name), yaku_han));
                 }
+            }
 
-                if name == &String::from("fu") {
-                    let int_array = column.as_any().downcast_ref::<Int32Array>().unwrap();
-                    self.fu = int_array.value(row_index);
-                }
+            if name == "han" {
+                let int_array = column
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .context("han column is not Int32Array")?;
+                self.han = int_array.value(row_index);
+            }
 
-                if name == &String::from("yaku") {
-                    let string_array = column.as_any().downcast_ref::<ListArray>().unwrap();
-                    let cell = string_array.value(row_index);
+            if name == "score" {
+                let int_array = column
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .context("score column is not Int32Array")?;
+                self.score = int_array.value(row_index);
+            }
 
-                    let yaku_array = cell.as_any().downcast_ref::<StructArray>().unwrap();
+            if name == "dora_orig" {
+                let string_array = column
+                    .as_any()
+                    .downcast_ref::<ListArray>()
+                    .context("dora_orig column is not ListArray")?;
+                let cell = string_array.value(row_index);
 
-                    let yaku_names = yaku_array
-                        .column(0)
-                        .as_any()
-                        .downcast_ref::<StringArray>()
-                        .unwrap();
-                    let yaku_hans = yaku_array
-                        .column(1)
-                        .as_any()
-                        .downcast_ref::<Int32Array>()
-                        .unwrap();
+                let dora_array = cell
+                    .as_any()
+                    .downcast_ref::<UInt32Array>()
+                    .context("dora_orig cell is not UInt32Array")?;
 
-                    for i in 0..yaku_array.len() {
-                        let yaku_name = yaku_names.value(i);
-                        let yaku_han = yaku_hans.value(i);
+                self.dora = (0..dora_array.len())
+                    .map(|idx| {
+                        let dora = dora_array.value(idx);
+                        PaiT {
+                            pai_num: (dora >> 2) as u8,
+                            id: (dora & 3) as u8,
+                            is_nakare: false,
+                            is_riichi: false,
+                            is_tsumogiri: false,
+                        }
+                    })
+                    .collect();
+            }
 
-                        self.yaku.push((String::from(yaku_name), yaku_han));
-                    }
-                }
+            if name == "machipai" {
+                let int_array = column
+                    .as_any()
+                    .downcast_ref::<UInt32Array>()
+                    .context("machipai column is not UInt32Array")?;
+                let cell = int_array.value(row_index);
 
-                if name == &String::from("han") {
-                    let int_array = column.as_any().downcast_ref::<Int32Array>().unwrap();
-                    self.han = int_array.value(row_index);
-                }
+                self.machipai = PaiT {
+                    pai_num: (cell >> 2) as u8,
+                    id: (cell & 3) as u8,
+                    is_nakare: false,
+                    is_riichi: false,
+                    is_tsumogiri: false,
+                };
+            }
 
-                if name == &String::from("score") {
-                    let int_array = column.as_any().downcast_ref::<Int32Array>().unwrap();
-                    self.score = int_array.value(row_index);
-                }
+            if name == "uradora_orig" {
+                let string_array = column
+                    .as_any()
+                    .downcast_ref::<ListArray>()
+                    .context("uradora_orig column is not ListArray")?;
+                let cell = string_array.value(row_index);
 
-                if name == &String::from("dora_orig") {
-                    let string_array = column.as_any().downcast_ref::<ListArray>().unwrap();
-                    let cell = string_array.value(row_index);
+                let dora_array = cell
+                    .as_any()
+                    .downcast_ref::<UInt32Array>()
+                    .context("uradora_orig cell is not UInt32Array")?;
 
-                    let dora_array = cell.as_any().downcast_ref::<UInt32Array>().unwrap();
+                self.uradora = (0..dora_array.len())
+                    .map(|idx| {
+                        let dora = dora_array.value(idx);
+                        PaiT {
+                            pai_num: (dora >> 2) as u8,
+                            id: (dora & 3) as u8,
+                            is_nakare: false,
+                            is_riichi: false,
+                            is_tsumogiri: false,
+                        }
+                    })
+                    .collect();
+            }
 
-                    self.dora = (0..dora_array.len())
-                        .map(|idx| {
-                            let dora = dora_array.value(idx);
-                            PaiT {
-                                pai_num: (dora >> 2) as u8,
-                                id: (dora & 3) as u8,
-                                is_nakare: false,
-                                is_riichi: false,
-                                is_tsumogiri: false,
-                            }
-                        })
-                        .collect();
-                }
+            if name == "nukidora" {
+                let int_array = column
+                    .as_any()
+                    .downcast_ref::<UInt32Array>()
+                    .context("nukidora column is not UInt32Array")?;
+                let cell = int_array.value(row_index);
 
-                if name == &String::from("machipai") {
-                    let int_array = column.as_any().downcast_ref::<UInt32Array>().unwrap();
-                    let cell = int_array.value(row_index);
-
-                    self.machipai = PaiT {
-                        pai_num: (cell >> 2) as u8,
-                        id: (cell & 3) as u8,
-                        is_nakare: false,
-                        is_riichi: false,
-                        is_tsumogiri: false,
-                    };
-                }
-
-                if name == &String::from("uradora_orig") {
-                    let string_array = column.as_any().downcast_ref::<ListArray>().unwrap();
-                    let cell = string_array.value(row_index);
-
-                    let dora_array = cell.as_any().downcast_ref::<UInt32Array>().unwrap();
-
-                    self.uradora = (0..dora_array.len())
-                        .map(|idx| {
-                            let dora = dora_array.value(idx);
-                            PaiT {
-                                pai_num: (dora >> 2) as u8,
-                                id: (dora & 3) as u8,
-                                is_nakare: false,
-                                is_riichi: false,
-                                is_tsumogiri: false,
-                            }
-                        })
-                        .collect();
-                }
-
-                if name == &String::from("nukidora") {
-                    let int_array = column.as_any().downcast_ref::<UInt32Array>().unwrap();
-                    let cell = int_array.value(row_index);
-
-                    self.nukidora = cell;
-                }
-            });
+                self.nukidora = cell;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -274,7 +311,7 @@ pub fn load_agari_tehai<P: AsRef<Path>>(path: P, row_index: usize) -> anyhow::Re
 
         if row_index >= current_offset && row_index < current_offset + batch_len {
             let local_row_index = row_index - current_offset;
-            ret.get_row_with_types(&record_batch, local_row_index);
+            ret.get_row_with_types(&record_batch, local_row_index)?;
             return Ok(ret);
         }
         current_offset += batch_len;

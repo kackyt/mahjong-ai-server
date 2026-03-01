@@ -40,10 +40,10 @@ unsafe fn experiment(func: MJPInterfaceFuncP, inst: *mut c_void, play_log: &mut 
     let mut is_agari = false;
 
     for _i in 0..18 {
-        let mut tsumohai_num: usize;
+        let tsumohai_num: usize;
         {
             let state = &mut G_STATE;
-            state.tsumo(play_log);
+            let _ = state.tsumo(play_log);
             tsumohai_num = state.players[state.teban as usize]
                 .tsumohai
                 .pai_num
@@ -72,9 +72,9 @@ unsafe fn experiment(func: MJPInterfaceFuncP, inst: *mut c_void, play_log: &mut 
             }
 
             if flag == MJPIR_SUTEHAI {
-                state.sutehai(play_log, index as usize, false);
+                let _ = state.sutehai(play_log, index as usize, false);
             } else if flag == MJPIR_REACH {
-                state.sutehai(play_log, index as usize, true);
+                let _ = state.sutehai(play_log, index as usize, true);
             } else if flag == MJPIR_TSUMO {
                 let score: [i32; 4] = [0, 0, 0, 0];
                 println!("agari!!!");

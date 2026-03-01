@@ -1,4 +1,4 @@
-use std::{any, env};
+use std::env;
 
 use ai_bridge::{
     ai_loader::{get_ai_symbol, load_ai},
@@ -70,7 +70,7 @@ impl AI {
         // use std::thread::sleep;
         // use std::time::Duration;
         // sleep(Duration::from_millis(100));
-        println!("AI thinking...");
+        debug!("AI thinking...");
 
         (self.symbol)(self.inst, MJPI_SUTEHAI.try_into().unwrap(), tsumohai_num, 0)
             .try_into()
@@ -233,31 +233,19 @@ impl Application for App {
                 state.create(b"test", player_len, &mut self.play_log);
                 state.shuffle();
                 state.start(&mut self.play_log);
-                state.tsumo(&mut self.play_log);
+                let _ = state.tsumo(&mut self.play_log);
 
                 self.state = AppState::Started;
                 self.turns = 0;
                 self.riichi_intent = false;
 
                 // Initialize Round Info
-                state.oya = state.oya; // Keep existing or reset? create() resets?
-                                       // create() sets rule, players. It DOES NOT reset oya/bakaze explicitly usually?
-                                       // Actually create() is:
-                                       // self.player_len = player_len;
-                                       // self.rule.update_to_default(); ...
-
                 // We should probably initialize G_STATE vals if this is a NEW game.
                 state.bakaze = 0;
                 state.kyoku_id = 1;
                 state.tsumobou = 0;
                 state.riichibou = 0;
                 state.oya = 0;
-
-                // 各プレイヤーのフラグ・状態クリア
-                for _p in state.players.iter_mut() {
-                    // (PlayerT自体にはcan_ron_flag等のフィールドはないため、GUI側で管理している状態のみを対象とするのが本来の形ですが、
-                    // ここではループ自体が不要なためスキップします。sutahai_len等があればリセットする前提)
-                }
 
                 // グローバル待ちフラグクリア
                 self.can_ron_flag = false;
@@ -314,7 +302,7 @@ impl Application for App {
                             self.last_agari_players.clear();
                             self.show_modal("流局");
                         } else {
-                            state.tsumo(&mut self.play_log);
+                            let _ = state.tsumo(&mut self.play_log);
 
                             // Check if next player is AI
                             let next_teban = state.teban as usize;
@@ -322,7 +310,7 @@ impl Application for App {
                                 && next_teban != 0
                             {
                                 if next_teban - 1 < self.ai_instances.len() {
-                                    println!("Triggering AI for P{}", next_teban);
+                                    debug!("Triggering AI for P{}", next_teban);
                                     let ai = self.ai_instances[next_teban - 1].clone();
                                     let tsumohai_num: usize = state.players[next_teban]
                                         .tsumohai
@@ -478,8 +466,8 @@ impl Application for App {
                                     // Cannot call on own discard
                                     if discarder_idx != 0 {
                                         // 1. Check RON
-                                        println!("DISCARDER: {}", discarder_idx);
-                                        println!("DISCARD: {}", self.sutehai);
+                                        debug!("DISCARDER: {}", discarder_idx);
+                                        debug!("DISCARD: {}", self.sutehai);
 
                                         if let Some(_) = state.check_ron(0, &self.sutehai) {
                                             self.can_ron_flag = true;
@@ -501,7 +489,7 @@ impl Application for App {
                                             }
                                         }
 
-                                        println!("can_ron_flag: {}, can_pon_flag: {}, can_chi_flag: {}, can_kan_flag: {}", self.can_ron_flag, self.can_pon_flag, self.can_chi_flag, self.can_kan_flag);
+                                        debug!("can_ron_flag: {}, can_pon_flag: {}, can_chi_flag: {}, can_kan_flag: {}", self.can_ron_flag, self.can_pon_flag, self.can_chi_flag, self.can_kan_flag);
 
                                         if self.can_ron_flag
                                             || self.can_pon_flag
@@ -514,7 +502,7 @@ impl Application for App {
                                         }
                                     }
 
-                                    state.tsumo(&mut self.play_log);
+                                    let _ = state.tsumo(&mut self.play_log);
 
                                     let next_teban = state.teban as usize;
 
@@ -585,7 +573,7 @@ impl Application for App {
 
                 // Proceed to next turn
                 let state = &mut G_STATE;
-                state.tsumo(&mut self.play_log);
+                let _ = state.tsumo(&mut self.play_log);
                 let next_teban = state.teban as usize;
 
                 // Check if next player is AI
@@ -711,7 +699,7 @@ impl Application for App {
                     state.shuffle();
                     state.start(&mut self.play_log);
                     // Oya needs to draw the 14th tile
-                    state.tsumo(&mut self.play_log);
+                    let _ = state.tsumo(&mut self.play_log);
 
                     self.state = AppState::Started;
                     self.turns = 0;

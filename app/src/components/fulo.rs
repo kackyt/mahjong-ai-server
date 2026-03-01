@@ -15,7 +15,7 @@ pub fn view<'a>(mentsu_list: &[MentsuT]) -> Element<'a, Message> {
         let len = mentsu.pai_len as usize;
 
         let mk_img = |pai_num: u32| {
-            let handle = images::get(pai_num, 0, false);
+            let handle = images::get(pai_num, 0);
             image(handle)
         };
 
