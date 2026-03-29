@@ -65,7 +65,7 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
 
             let mut pstate = PaiState::default();
             for i in 0..34 {
-                 match i {
+                match i {
                     0..=8 => pstate.hai_count_m[i] = hand_counts[i] as i32,
                     9..=17 => pstate.hai_count_p[i - 9] = hand_counts[i] as i32,
                     18..=26 => pstate.hai_count_s[i - 18] = hand_counts[i] as i32,
@@ -74,7 +74,8 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
                 }
             }
 
-            let n_naki = wrapper.game_state.players[wrapper.game_state.teban as usize].mentsu_len as i32;
+            let n_naki =
+                wrapper.game_state.players[wrapper.game_state.teban as usize].mentsu_len as i32;
             let shanten = pstate.get_shanten(n_naki as usize);
 
             let ctx = SearchContext {
@@ -126,7 +127,12 @@ mod tests {
     #[ignore]
     fn test_eval_sutehai_basic() {
         let mut game_state = GameStateT::default();
-        game_state.players = [PlayerT::default(), PlayerT::default(), PlayerT::default(), PlayerT::default()];
+        game_state.players = [
+            PlayerT::default(),
+            PlayerT::default(),
+            PlayerT::default(),
+            PlayerT::default(),
+        ];
         game_state.teban = 0;
 
         let mut player = &mut game_state.players[0];

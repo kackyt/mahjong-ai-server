@@ -108,7 +108,8 @@ unsafe fn mjsend_message_impl(
 
             if let Some(typ) = v {
                 if *typ == 1 {
-                    let tehai: &mut MJITehai1 = &mut *std::ptr::with_exposed_provenance_mut::<MJITehai1>(param2);
+                    let tehai: &mut MJITehai1 =
+                        &mut *std::ptr::with_exposed_provenance_mut::<MJITehai1>(param2);
 
                     if param1 == 0 {
                         let player = &taku.players[taku.teban as usize];
@@ -126,7 +127,8 @@ unsafe fn mjsend_message_impl(
                     return 1;
                 }
             }
-            let tehai: &mut MJITehai = &mut *std::ptr::with_exposed_provenance_mut::<MJITehai>(param2);
+            let tehai: &mut MJITehai =
+                &mut *std::ptr::with_exposed_provenance_mut::<MJITehai>(param2);
 
             if param1 == 0 {
                 let player = &taku.players[taku.teban as usize];
@@ -377,7 +379,8 @@ unsafe fn mjsend_message_impl(
         MJMI_GETKAWAEX => {
             let idx = (param1 & 0xFFFF) as usize;
             let player = &taku.players[idx];
-            let mut p: *mut MJIKawahai = std::ptr::with_exposed_provenance_mut::<MJIKawahai>(param2);
+            let mut p: *mut MJIKawahai =
+                std::ptr::with_exposed_provenance_mut::<MJIKawahai>(param2);
 
             for i in 0..player.kawahai_len as usize {
                 let kawa_ref = &mut *p;

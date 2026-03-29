@@ -96,7 +96,7 @@ pub fn mj0_simulate(
 
         // Melds (Opponents)
         if pidx != game_state.teban as usize {
-             for i in 0..player.mentsu_len as usize {
+            for i in 0..player.mentsu_len as usize {
                 let m = &player.mentsu[i];
                 for j in 0..m.pai_len as usize {
                     let p = &m.pai_list[j];
@@ -106,7 +106,7 @@ pub fn mj0_simulate(
                         }
                     }
                 }
-             }
+            }
         }
     }
 
@@ -130,10 +130,10 @@ pub fn mj0_simulate(
 
     // 4. Monte Carlo Simulation (SIMU_SIZE)
     let mut rng = rand::rng(); // Use new rand syntax if updated, or thread_rng.
-    // rand 0.9 uses rand::rng() probably?
-    // Let's use old style or check docs?
-    // Error said "use of unresolved module rand".
-    // I added rand.
+                               // rand 0.9 uses rand::rng() probably?
+                               // Let's use old style or check docs?
+                               // Error said "use of unresolved module rand".
+                               // I added rand.
 
     for _ in 0..SIMU_SIZE {
         let mut sim_wall = wall_counts.clone();
@@ -151,7 +151,9 @@ pub fn mj0_simulate(
         let mut attempts = 0;
         loop {
             attempts += 1;
-            if attempts > 100 { break; }
+            if attempts > 100 {
+                break;
+            }
 
             let mut done = true;
             for j in 0..3 {
@@ -168,7 +170,8 @@ pub fn mj0_simulate(
                         let p2 = p1 + 1;
                         let p3 = p1 + 2;
 
-                        let c = (sim_wall[p1] as u32) * (sim_wall[p2] as u32) * (sim_wall[p3] as u32);
+                        let c =
+                            (sim_wall[p1] as u32) * (sim_wall[p2] as u32) * (sim_wall[p3] as u32);
                         if c > 0 {
                             candidates.push(MentsuCandidate {
                                 tiles: [p1 as u8, p2 as u8, p3 as u8],
@@ -213,7 +216,9 @@ pub fn mj0_simulate(
                     current_mentsu_count[j] += 1;
                 }
             }
-            if done { break; }
+            if done {
+                break;
+            }
         }
 
         for j in 0..3 {
@@ -241,17 +246,24 @@ pub fn mj0_simulate(
                         let remove_idx = rng.random_range(0..3);
                         let p = m.tiles[0] as usize;
                         match remove_idx {
-                            0 => { // Ryanmen/Penchan
+                            0 => {
+                                // Ryanmen/Penchan
                                 machi[p] = true;
-                                if (p % 9) < 6 { machi[p+3] = true; }
-                            },
-                            1 => { // Kanchan
-                                machi[p+1] = true;
-                            },
-                            2 => { // Ryanmen/Penchan
-                                machi[p+2] = true;
-                                if (p % 9) > 0 { machi[p-1] = true; }
-                            },
+                                if (p % 9) < 6 {
+                                    machi[p + 3] = true;
+                                }
+                            }
+                            1 => {
+                                // Kanchan
+                                machi[p + 1] = true;
+                            }
+                            2 => {
+                                // Ryanmen/Penchan
+                                machi[p + 2] = true;
+                                if (p % 9) > 0 {
+                                    machi[p - 1] = true;
+                                }
+                            }
                             _ => {}
                         }
                     } else {

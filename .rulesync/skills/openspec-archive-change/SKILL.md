@@ -22,7 +22,7 @@ Archive a completed change in the experimental workflow.
    Show only active changes (not already archived).
    Include the schema used for each change if available.
 
-   **IMPORTANT**: Do NOT guess or auto-select a change. Always let the user choose.
+   **IMPORTANT**: Optionally specify a change name. If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
 2. **Check artifact completion status**
 
@@ -63,7 +63,9 @@ Archive a completed change in the experimental workflow.
    - If changes needed: "Sync now (recommended)", "Archive without syncing"
    - If already synced: "Archive now", "Sync anyway", "Cancel"
 
-   If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
+   If user chooses "Sync now (recommended)" or "Sync anyway", use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"), then proceed to archive.
+   If user chooses "Archive without syncing" or "Archive now", proceed to archive directly.
+   If user chooses "Cancel", stop and do not archive.
 
 5. **Perform the archive**
 
@@ -93,7 +95,7 @@ Archive a completed change in the experimental workflow.
 
 **Output On Success**
 
-```
+```text
 ## Archive Complete
 
 **Change:** <change-name>

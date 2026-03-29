@@ -1,4 +1,4 @@
-use mahjong_core::mahjong_generated::open_mahjong::{GameStateT};
+use mahjong_core::mahjong_generated::open_mahjong::GameStateT;
 
 pub fn paidistance(tehai_counts: &[u8; 34], target: usize) -> i32 {
     let target = target as i32;

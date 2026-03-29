@@ -1,9 +1,7 @@
 use crate::state::AIStateWrapper;
 use crate::utils::{get_dist_coef, get_kind_coef, paidistance};
 use mahjong_core::agari::AgariBehavior;
-use mahjong_core::mahjong_generated::open_mahjong::{
-    Mentsu, MentsuFlag, MentsuPai, MentsuType,
-};
+use mahjong_core::mahjong_generated::open_mahjong::{Mentsu, MentsuFlag, MentsuPai, MentsuType};
 use mahjong_core::shanten::PaiState;
 
 #[derive(Clone)]
@@ -14,11 +12,7 @@ pub struct SearchContext<'a> {
     pub hand_counts: [u8; 34],
 }
 
-pub fn calc_machi_coef(
-    ctx: &SearchContext,
-    current_counts: &[u8; 34],
-    machi_hai: usize,
-) -> f64 {
+pub fn calc_machi_coef(ctx: &SearchContext, current_counts: &[u8; 34], machi_hai: usize) -> f64 {
     let mut temp_counts = *current_counts;
     if temp_counts[machi_hai] > 0 {
         temp_counts[machi_hai] -= 1;
@@ -51,7 +45,9 @@ pub fn calc_machi_coef(
 
         let used_from_wall = if temp_counts[i] > ctx.hand_counts[i] {
             temp_counts[i] - ctx.hand_counts[i]
-        } else { 0 };
+        } else {
+            0
+        };
 
         let left = avail_in_wall - (used_from_wall as f64);
 
@@ -101,7 +97,9 @@ pub fn calc_score(
     let mut max_val = 0.0;
 
     let player = &ctx.wrapper.game_state.players[ctx.wrapper.game_state.teban as usize];
-    let open_mentsu: Vec<Mentsu> = player.mentsu.iter()
+    let open_mentsu: Vec<Mentsu> = player
+        .mentsu
+        .iter()
         .take(player.mentsu_len as usize)
         .map(|m| m.pack())
         .collect();
@@ -147,83 +145,83 @@ pub fn calc_score(
         }
 
         if possible && probability > 0.0 {
-             let head_pai_obj = MentsuPai::new(head_pai as u8, 0, MentsuFlag::FLAG_NONE);
-             let dummy = MentsuPai::default();
-             let head_mentsu = Mentsu::new(
+            let head_pai_obj = MentsuPai::new(head_pai as u8, 0, MentsuFlag::FLAG_NONE);
+            let dummy = MentsuPai::default();
+            let head_mentsu = Mentsu::new(
                 &[head_pai_obj, head_pai_obj, dummy, dummy],
                 2,
-                MentsuType::TYPE_ATAMA
-             );
+                MentsuType::TYPE_ATAMA,
+            );
 
-             let mut full_mentsu = mentsu_list.clone();
-             full_mentsu.push(head_mentsu);
+            let mut full_mentsu = mentsu_list.clone();
+            full_mentsu.push(head_mentsu);
 
-             for (idx, m) in full_mentsu.iter().enumerate() {
-                 let first_pai = m.pai_list().get(0).pai_num() as usize;
-                 let mut is_machi_candidate = false;
-                 let mut machi_hai_candidate = 0;
+            for (idx, m) in full_mentsu.iter().enumerate() {
+                let first_pai = m.pai_list().get(0).pai_num() as usize;
+                let mut is_machi_candidate = false;
+                let mut machi_hai_candidate = 0;
 
-                 match m.mentsu_type() {
-                     MentsuType::TYPE_KOUTSU | MentsuType::TYPE_ATAMA => {
-                         if current_counts[first_pai] > ctx.hand_counts[first_pai] {
-                             is_machi_candidate = true;
-                             machi_hai_candidate = first_pai;
-                         }
-                     },
-                     MentsuType::TYPE_SHUNTSU => {
-                         if current_counts[first_pai] > ctx.hand_counts[first_pai] {
-                             is_machi_candidate = true;
-                             machi_hai_candidate = first_pai;
-                         } else if current_counts[first_pai+1] > ctx.hand_counts[first_pai+1] {
-                             is_machi_candidate = true;
-                             machi_hai_candidate = first_pai + 1;
-                         } else if current_counts[first_pai+2] > ctx.hand_counts[first_pai+2] {
-                             is_machi_candidate = true;
-                             machi_hai_candidate = first_pai + 2;
-                         }
-                     },
-                     _ => {}
-                 }
+                match m.mentsu_type() {
+                    MentsuType::TYPE_KOUTSU | MentsuType::TYPE_ATAMA => {
+                        if current_counts[first_pai] > ctx.hand_counts[first_pai] {
+                            is_machi_candidate = true;
+                            machi_hai_candidate = first_pai;
+                        }
+                    }
+                    MentsuType::TYPE_SHUNTSU => {
+                        if current_counts[first_pai] > ctx.hand_counts[first_pai] {
+                            is_machi_candidate = true;
+                            machi_hai_candidate = first_pai;
+                        } else if current_counts[first_pai + 1] > ctx.hand_counts[first_pai + 1] {
+                            is_machi_candidate = true;
+                            machi_hai_candidate = first_pai + 1;
+                        } else if current_counts[first_pai + 2] > ctx.hand_counts[first_pai + 2] {
+                            is_machi_candidate = true;
+                            machi_hai_candidate = first_pai + 2;
+                        }
+                    }
+                    _ => {}
+                }
 
-                 if is_machi_candidate {
-                     let mut test_mentsu = full_mentsu.clone();
-                     let mut m_mod = test_mentsu[idx].unpack();
-                     for p in &mut m_mod.pai_list {
-                         if p.pai_num as usize == machi_hai_candidate {
-                             p.flag = MentsuFlag::FLAG_AGARI;
-                             break;
-                         }
-                     }
-                     test_mentsu[idx] = m_mod.pack();
+                if is_machi_candidate {
+                    let mut test_mentsu = full_mentsu.clone();
+                    let mut m_mod = test_mentsu[idx].unpack();
+                    for p in &mut m_mod.pai_list {
+                        if p.pai_num as usize == machi_hai_candidate {
+                            p.flag = MentsuFlag::FLAG_AGARI;
+                            break;
+                        }
+                    }
+                    test_mentsu[idx] = m_mod.pack();
 
-                     let agari_state = ctx.wrapper.game_state.get_agari(
-                         ctx.wrapper.game_state.teban as usize,
-                         &test_mentsu,
-                         &open_mentsu,
-                         false
-                     );
+                    let agari_state = ctx.wrapper.game_state.get_agari(
+                        ctx.wrapper.game_state.teban as usize,
+                        &test_mentsu,
+                        &open_mentsu,
+                        false,
+                    );
 
-                     let mut yakus = ctx.wrapper.game_state.get_condition_yaku(
-                         ctx.wrapper.game_state.teban as usize,
-                         &agari_state
-                     );
-                     yakus.extend(agari_state.get_yaku_list());
-                     yakus.extend(ctx.wrapper.game_state.get_dora_yaku(
-                         ctx.wrapper.game_state.teban as usize,
-                         &test_mentsu,
-                         &open_mentsu,
-                         0
-                     ));
+                    let mut yakus = ctx
+                        .wrapper
+                        .game_state
+                        .get_condition_yaku(ctx.wrapper.game_state.teban as usize, &agari_state);
+                    yakus.extend(agari_state.get_yaku_list());
+                    yakus.extend(ctx.wrapper.game_state.get_dora_yaku(
+                        ctx.wrapper.game_state.teban as usize,
+                        &test_mentsu,
+                        &open_mentsu,
+                        0,
+                    ));
 
-                     let agari_res = agari_state.get_agari(&yakus);
-                     let score = agari_res.score as f64;
-                     let machi_coef = calc_machi_coef(ctx, current_counts, machi_hai_candidate);
-                     let term = 0.8 * probability * probability * score + 0.2 * probability * score;
-                     let val = machi_coef * term / (diff as f64).max(1.0);
+                    let agari_res = agari_state.get_agari(&yakus);
+                    let score = agari_res.score as f64;
+                    let machi_coef = calc_machi_coef(ctx, current_counts, machi_hai_candidate);
+                    let term = 0.8 * probability * probability * score + 0.2 * probability * score;
+                    let val = machi_coef * term / (diff as f64).max(1.0);
 
-                     max_val += val;
-                 }
-             }
+                    max_val += val;
+                }
+            }
         }
 
         current_counts[head_pai] -= 2;
@@ -263,47 +261,53 @@ pub fn shuntsu_point(
         let pai = (i / 7) * 9 + (i % 7);
         // Optimization: Use simple availability check before checking `hand_counts`.
         let p1_ok = ctx.hand_counts[pai] > 0 || ctx.wrapper.remain_counts[pai] > 0;
-        let p2_ok = ctx.hand_counts[pai+1] > 0 || ctx.wrapper.remain_counts[pai+1] > 0;
-        let p3_ok = ctx.hand_counts[pai+2] > 0 || ctx.wrapper.remain_counts[pai+2] > 0;
+        let p2_ok = ctx.hand_counts[pai + 1] > 0 || ctx.wrapper.remain_counts[pai + 1] > 0;
+        let p3_ok = ctx.hand_counts[pai + 2] > 0 || ctx.wrapper.remain_counts[pai + 2] > 0;
 
         if !p1_ok || !p2_ok || !p3_ok {
             continue;
         }
 
         let check_avail = |p: usize| -> bool {
-             let used = current_counts[p] + 1;
-             let have = ctx.hand_counts[p];
-             let remain = ctx.wrapper.remain_counts[p];
-             if used > have {
-                 let need = used - have;
-                 if need > remain { return false; }
-             }
-             true
+            let used = current_counts[p] + 1;
+            let have = ctx.hand_counts[p];
+            let remain = ctx.wrapper.remain_counts[p];
+            if used > have {
+                let need = used - have;
+                if need > remain {
+                    return false;
+                }
+            }
+            true
         };
 
-        if check_avail(pai) && check_avail(pai+1) && check_avail(pai+2) {
-             current_counts[pai] += 1;
-             current_counts[pai+1] += 1;
-             current_counts[pai+2] += 1;
+        if check_avail(pai) && check_avail(pai + 1) && check_avail(pai + 2) {
+            current_counts[pai] += 1;
+            current_counts[pai + 1] += 1;
+            current_counts[pai + 2] += 1;
 
-             let p1 = MentsuPai::new(pai as u8, 0, MentsuFlag::FLAG_NONE);
-             let p2 = MentsuPai::new((pai+1) as u8, 0, MentsuFlag::FLAG_NONE);
-             let p3 = MentsuPai::new((pai+2) as u8, 0, MentsuFlag::FLAG_NONE);
-             let dummy = MentsuPai::default();
+            let p1 = MentsuPai::new(pai as u8, 0, MentsuFlag::FLAG_NONE);
+            let p2 = MentsuPai::new((pai + 1) as u8, 0, MentsuFlag::FLAG_NONE);
+            let p3 = MentsuPai::new((pai + 2) as u8, 0, MentsuFlag::FLAG_NONE);
+            let dummy = MentsuPai::default();
 
-             let m = Mentsu::new(
-                 &[p1, p2, p3, dummy],
-                 3,
-                 MentsuType::TYPE_SHUNTSU
-             );
-             current_mentsu.push(m);
+            let m = Mentsu::new(&[p1, p2, p3, dummy], 3, MentsuType::TYPE_SHUNTSU);
+            current_mentsu.push(m);
 
-             ret += shuntsu_point(ctx, current_counts, current_mentsu, koutsu_num, shuntsu_num - 1, koutsu_pos, i);
+            ret += shuntsu_point(
+                ctx,
+                current_counts,
+                current_mentsu,
+                koutsu_num,
+                shuntsu_num - 1,
+                koutsu_pos,
+                i,
+            );
 
-             current_mentsu.pop();
-             current_counts[pai] -= 1;
-             current_counts[pai+1] -= 1;
-             current_counts[pai+2] -= 1;
+            current_mentsu.pop();
+            current_counts[pai] -= 1;
+            current_counts[pai + 1] -= 1;
+            current_counts[pai + 2] -= 1;
         }
     }
 
@@ -333,38 +337,54 @@ pub fn koutsu_point(
     let mut ret = 0.0;
 
     for i in koutsu_pos..34 {
-        if ctx.hand_counts[i] == 0 { continue; }
+        if ctx.hand_counts[i] == 0 {
+            continue;
+        }
 
         let check_avail = |p: usize| -> bool {
-             let used = current_counts[p] + 3;
-             let have = ctx.hand_counts[p];
-             let remain = ctx.wrapper.remain_counts[p];
-             if used > have {
-                 let need = used - have;
-                 if need > remain { return false; }
-             }
-             true
+            let used = current_counts[p] + 3;
+            let have = ctx.hand_counts[p];
+            let remain = ctx.wrapper.remain_counts[p];
+            if used > have {
+                let need = used - have;
+                if need > remain {
+                    return false;
+                }
+            }
+            true
         };
 
         if check_avail(i) {
-             current_counts[i] += 3;
-             let p = MentsuPai::new(i as u8, 0, MentsuFlag::FLAG_NONE);
-             let dummy = MentsuPai::default();
-             let m = Mentsu::new(
-                 &[p, p, p, dummy],
-                 3,
-                 MentsuType::TYPE_KOUTSU
-             );
-             current_mentsu.push(m);
+            current_counts[i] += 3;
+            let p = MentsuPai::new(i as u8, 0, MentsuFlag::FLAG_NONE);
+            let dummy = MentsuPai::default();
+            let m = Mentsu::new(&[p, p, p, dummy], 3, MentsuType::TYPE_KOUTSU);
+            current_mentsu.push(m);
 
-             if koutsu_num - 1 > 0 {
-                 ret += koutsu_point(ctx, current_counts, current_mentsu, koutsu_num - 1, shuntsu_num, i + 1, shuntsu_pos);
-             } else {
-                 ret += shuntsu_point(ctx, current_counts, current_mentsu, 0, shuntsu_num, i + 1, shuntsu_pos);
-             }
+            if koutsu_num - 1 > 0 {
+                ret += koutsu_point(
+                    ctx,
+                    current_counts,
+                    current_mentsu,
+                    koutsu_num - 1,
+                    shuntsu_num,
+                    i + 1,
+                    shuntsu_pos,
+                );
+            } else {
+                ret += shuntsu_point(
+                    ctx,
+                    current_counts,
+                    current_mentsu,
+                    0,
+                    shuntsu_num,
+                    i + 1,
+                    shuntsu_pos,
+                );
+            }
 
-             current_mentsu.pop();
-             current_counts[i] -= 3;
+            current_mentsu.pop();
+            current_counts[i] -= 3;
         }
     }
 
@@ -382,10 +402,12 @@ pub fn chiitoi_point(
         let mut rest = ctx.nokori_sum;
 
         for i in 0..34 {
-             if current_counts[i] > ctx.hand_counts[i] {
+            if current_counts[i] > ctx.hand_counts[i] {
                 let needed = (current_counts[i] - ctx.hand_counts[i]) as i32;
                 let avail_in_wall = ctx.wrapper.nokorihai[i];
-                if (needed as u8) > ctx.wrapper.remain_counts[i] { return 0.0; }
+                if (needed as u8) > ctx.wrapper.remain_counts[i] {
+                    return 0.0;
+                }
 
                 let dist = paidistance(&ctx.hand_counts, i);
                 let dist_c = get_dist_coef(dist);
@@ -400,7 +422,9 @@ pub fn chiitoi_point(
             }
         }
 
-        if probability <= 0.0 { return 0.0; }
+        if probability <= 0.0 {
+            return 0.0;
+        }
 
         let mut mentsu_vec = Vec::with_capacity(7);
         for i in 0..34 {
@@ -410,38 +434,38 @@ pub fn chiitoi_point(
                 mentsu_vec.push(Mentsu::new(
                     &[p, p, dummy, dummy],
                     2,
-                    MentsuType::TYPE_ATAMA
+                    MentsuType::TYPE_ATAMA,
                 ));
             }
         }
 
         if let Some(_) = mentsu_vec.first() {
-             let mut test_mentsu = mentsu_vec.clone();
-             let mut m = test_mentsu[0].unpack();
-             m.pai_list[0].flag = MentsuFlag::FLAG_AGARI;
-             test_mentsu[0] = m.pack();
+            let mut test_mentsu = mentsu_vec.clone();
+            let mut m = test_mentsu[0].unpack();
+            m.pai_list[0].flag = MentsuFlag::FLAG_AGARI;
+            test_mentsu[0] = m.pack();
 
-             let agari_state = ctx.wrapper.game_state.get_agari(
-                 ctx.wrapper.game_state.teban as usize,
-                 &test_mentsu,
-                 &vec![],
-                 false
-             );
-             let mut yakus = ctx.wrapper.game_state.get_condition_yaku(
-                 ctx.wrapper.game_state.teban as usize,
-                 &agari_state
-             );
-             yakus.extend(agari_state.get_yaku_list());
-             yakus.extend(ctx.wrapper.game_state.get_dora_yaku(
-                 ctx.wrapper.game_state.teban as usize,
-                 &test_mentsu,
-                 &vec![],
-                 0
-             ));
-             let agari_res = agari_state.get_agari(&yakus);
-             let score = agari_res.score as f64;
+            let agari_state = ctx.wrapper.game_state.get_agari(
+                ctx.wrapper.game_state.teban as usize,
+                &test_mentsu,
+                &vec![],
+                false,
+            );
+            let mut yakus = ctx
+                .wrapper
+                .game_state
+                .get_condition_yaku(ctx.wrapper.game_state.teban as usize, &agari_state);
+            yakus.extend(agari_state.get_yaku_list());
+            yakus.extend(ctx.wrapper.game_state.get_dora_yaku(
+                ctx.wrapper.game_state.teban as usize,
+                &test_mentsu,
+                &vec![],
+                0,
+            ));
+            let agari_res = agari_state.get_agari(&yakus);
+            let score = agari_res.score as f64;
 
-             return 0.8 * probability * probability * score + 0.2 * probability * score;
+            return 0.8 * probability * probability * score + 0.2 * probability * score;
         }
         return 0.0;
     }
@@ -457,18 +481,18 @@ pub fn chiitoi_point(
 
         let have = ctx.hand_counts[i];
         if have >= 2 {
-             if current_counts[i] == 0 {
-                 current_counts[i] = 2;
-                 sum += chiitoi_point(ctx, current_counts, cnt + 1, i + 1);
-                 current_counts[i] = 0;
-             }
+            if current_counts[i] == 0 {
+                current_counts[i] = 2;
+                sum += chiitoi_point(ctx, current_counts, cnt + 1, i + 1);
+                current_counts[i] = 0;
+            }
         } else if have == 1 {
-             let need = 1;
-             if ctx.wrapper.remain_counts[i] >= need {
-                 current_counts[i] = 2;
-                 sum += chiitoi_point(ctx, current_counts, cnt + 1, i + 1);
-                 current_counts[i] = 0;
-             }
+            let need = 1;
+            if ctx.wrapper.remain_counts[i] >= need {
+                current_counts[i] = 2;
+                sum += chiitoi_point(ctx, current_counts, cnt + 1, i + 1);
+                current_counts[i] = 0;
+            }
         }
     }
     sum

@@ -4,7 +4,8 @@ use ai_bridge::{
     ai_loader::{get_ai_symbol, load_ai},
     bindings::{
         MJEK_RYUKYOKU, MJPIR_REACH, MJPIR_SUTEHAI, MJPIR_TSUMO, MJPI_BASHOGIME,
-        MJPI_CREATEINSTANCE, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_STARTGAME, MJPI_SUTEHAI,
+        MJPI_CREATEINSTANCE, MJPI_DESTROY, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_STARTGAME,
+        MJPI_SUTEHAI,
     },
     interface::{mjsend_message, MJPInterfaceFuncP, G_STATE},
 };
@@ -82,6 +83,7 @@ impl Drop for AI {
     fn drop(&mut self) {
         if !self.inst.is_null() {
             unsafe {
+                (self.symbol)(self.inst, MJPI_DESTROY.try_into().unwrap(), 0, 0);
                 libc::free(self.inst);
             }
         }
