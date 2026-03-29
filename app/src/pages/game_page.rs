@@ -21,7 +21,7 @@ pub fn view<'a>(
     can_kan_flag: bool,
 ) -> Element<'a, Message> {
     unsafe {
-        let core_state = &G_STATE;
+        let core_state = &*std::ptr::addr_of!(G_STATE);
 
         let isnt_riichi = !core_state.players[0].is_riichi;
         let shanten = {
@@ -41,8 +41,8 @@ pub fn view<'a>(
         };
 
         let dora_elem = dora::view(
-            &core_state.get_dora(),
-            &core_state.get_uradora(),
+            core_state.get_dora(),
+            core_state.get_uradora(),
             state == AppState::HandEnded || state == AppState::GameFinished,
         );
 

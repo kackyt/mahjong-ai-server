@@ -21,12 +21,12 @@ pub fn calc_machi_coef(ctx: &SearchContext, current_counts: &[u8; 34], machi_hai
     }
 
     let mut pstate = PaiState::default();
-    for i in 0..34 {
+    for (i, &count) in temp_counts.iter().enumerate().take(34) {
         match i {
-            0..=8 => pstate.hai_count_m[i] = temp_counts[i] as i32,
-            9..=17 => pstate.hai_count_p[i - 9] = temp_counts[i] as i32,
-            18..=26 => pstate.hai_count_s[i - 18] = temp_counts[i] as i32,
-            27..=33 => pstate.hai_count_z[i - 27] = temp_counts[i] as i32,
+            0..=8 => pstate.hai_count_m[i] = count as i32,
+            9..=17 => pstate.hai_count_p[i - 9] = count as i32,
+            18..=26 => pstate.hai_count_s[i - 18] = count as i32,
+            27..=33 => pstate.hai_count_z[i - 27] = count as i32,
             _ => {}
         }
     }
@@ -39,15 +39,11 @@ pub fn calc_machi_coef(ctx: &SearchContext, current_counts: &[u8; 34], machi_hai
     let my_kawa = &player.kawahai;
     let kawa_len = player.kawahai_len as usize;
 
-    for i in 0..34 {
+    for (i, &count) in temp_counts.iter().enumerate().take(34) {
         // Optimization: Skip if no tiles remaining in wall
         let avail_in_wall = ctx.wrapper.nokorihai[i];
 
-        let used_from_wall = if temp_counts[i] > ctx.hand_counts[i] {
-            temp_counts[i] - ctx.hand_counts[i]
-        } else {
-            0
-        };
+        let used_from_wall = count.saturating_sub(ctx.hand_counts[i]);
 
         let left = avail_in_wall - (used_from_wall as f64);
 
@@ -91,7 +87,7 @@ pub fn calc_machi_coef(ctx: &SearchContext, current_counts: &[u8; 34], machi_hai
 pub fn calc_score(
     ctx: &SearchContext,
     current_counts: &mut [u8; 34],
-    mentsu_list: &Vec<Mentsu>,
+    mentsu_list: &[Mentsu],
     diff: i32,
 ) -> f64 {
     let mut max_val = 0.0;
@@ -120,9 +116,9 @@ pub fn calc_score(
         let mut rest = ctx.nokori_sum;
         let mut possible = true;
 
-        for i in 0..34 {
-            if current_counts[i] > ctx.hand_counts[i] {
-                let needed = (current_counts[i] - ctx.hand_counts[i]) as i32;
+        for (i, &count) in current_counts.iter().enumerate().take(34) {
+            if count > ctx.hand_counts[i] {
+                let needed = (count - ctx.hand_counts[i]) as i32;
 
                 let avail_in_wall = ctx.wrapper.nokorihai[i];
 
@@ -153,7 +149,7 @@ pub fn calc_score(
                 MentsuType::TYPE_ATAMA,
             );
 
-            let mut full_mentsu = mentsu_list.clone();
+            let mut full_mentsu = mentsu_list.to_owned();
             full_mentsu.push(head_mentsu);
 
             for (idx, m) in full_mentsu.iter().enumerate() {
@@ -234,15 +230,15 @@ pub fn shuntsu_point(
     ctx: &SearchContext,
     current_counts: &mut [u8; 34],
     current_mentsu: &mut Vec<Mentsu>,
-    koutsu_num: i32,
+    _koutsu_num: i32,
     shuntsu_num: i32,
-    koutsu_pos: usize,
+    _koutsu_pos: usize,
     shuntsu_pos: usize,
 ) -> f64 {
     let mut diff = 0;
-    for i in 0..34 {
-        if current_counts[i] > ctx.hand_counts[i] {
-            diff += (current_counts[i] - ctx.hand_counts[i]) as i32;
+    for (i, &count) in current_counts.iter().enumerate().take(34) {
+        if count > ctx.hand_counts[i] {
+            diff += (count - ctx.hand_counts[i]) as i32;
         }
     }
 
@@ -298,9 +294,9 @@ pub fn shuntsu_point(
                 ctx,
                 current_counts,
                 current_mentsu,
-                koutsu_num,
+                _koutsu_num,
                 shuntsu_num - 1,
-                koutsu_pos,
+                _koutsu_pos,
                 i,
             );
 
@@ -324,9 +320,9 @@ pub fn koutsu_point(
     shuntsu_pos: usize,
 ) -> f64 {
     let mut diff = 0;
-    for i in 0..34 {
-        if current_counts[i] > ctx.hand_counts[i] {
-            diff += (current_counts[i] - ctx.hand_counts[i]) as i32;
+    for (i, &count) in current_counts.iter().enumerate().take(34) {
+        if count > ctx.hand_counts[i] {
+            diff += (count - ctx.hand_counts[i]) as i32;
         }
     }
 
@@ -401,9 +397,9 @@ pub fn chiitoi_point(
         let mut probability = 1.0;
         let mut rest = ctx.nokori_sum;
 
-        for i in 0..34 {
-            if current_counts[i] > ctx.hand_counts[i] {
-                let needed = (current_counts[i] - ctx.hand_counts[i]) as i32;
+        for (i, &count) in current_counts.iter().enumerate().take(34) {
+            if count > ctx.hand_counts[i] {
+                let needed = (count - ctx.hand_counts[i]) as i32;
                 let avail_in_wall = ctx.wrapper.nokorihai[i];
                 if (needed as u8) > ctx.wrapper.remain_counts[i] {
                     return 0.0;
@@ -427,8 +423,8 @@ pub fn chiitoi_point(
         }
 
         let mut mentsu_vec = Vec::with_capacity(7);
-        for i in 0..34 {
-            if current_counts[i] >= 2 {
+        for (i, &count) in current_counts.iter().enumerate().take(34) {
+            if count >= 2 {
                 let p = MentsuPai::new(i as u8, 0, MentsuFlag::FLAG_NONE);
                 let dummy = MentsuPai::default();
                 mentsu_vec.push(Mentsu::new(
@@ -439,7 +435,7 @@ pub fn chiitoi_point(
             }
         }
 
-        if let Some(_) = mentsu_vec.first() {
+        if !mentsu_vec.is_empty() {
             let mut test_mentsu = mentsu_vec.clone();
             let mut m = test_mentsu[0].unpack();
             m.pai_list[0].flag = MentsuFlag::FLAG_AGARI;
@@ -448,7 +444,7 @@ pub fn chiitoi_point(
             let agari_state = ctx.wrapper.game_state.get_agari(
                 ctx.wrapper.game_state.teban as usize,
                 &test_mentsu,
-                &vec![],
+                &[],
                 false,
             );
             let mut yakus = ctx
@@ -459,7 +455,7 @@ pub fn chiitoi_point(
             yakus.extend(ctx.wrapper.game_state.get_dora_yaku(
                 ctx.wrapper.game_state.teban as usize,
                 &test_mentsu,
-                &vec![],
+                &[],
                 0,
             ));
             let agari_res = agari_state.get_agari(&yakus);

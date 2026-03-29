@@ -13,18 +13,18 @@ fn create_pai(pai_num: u8) -> PaiT {
 }
 
 fn setup_game_state() -> GameStateT {
-    let mut game_state = GameStateT::default();
-    // 4 Players
-    game_state.players = [
-        PlayerT::default(),
-        PlayerT::default(),
-        PlayerT::default(),
-        PlayerT::default(),
-    ];
-    game_state.teban = 0;
-    // Taku
-    game_state.taku = TakuT::default();
-    game_state.dora_len = 1;
+    let mut game_state = GameStateT {
+        players: [
+            PlayerT::default(),
+            PlayerT::default(),
+            PlayerT::default(),
+            PlayerT::default(),
+        ],
+        teban: 0,
+        taku: TakuT::default(),
+        dora_len: 1,
+        ..Default::default()
+    };
     game_state.taku.n5[0] = create_pai(0); // 1m dora indicator -> 2m dora
 
     game_state

@@ -45,7 +45,7 @@ fn get_rule(state: &GameStateT, idx: u32) -> u32 {
                 0
             }
         }
-        MJRL_AKA5S => state.rule.aka_type as u32,
+        MJRL_AKA5S => state.rule.aka_type,
         MJRL_SHANYU => {
             if state.rule.shanyu_score < 0 {
                 1
@@ -74,8 +74,8 @@ fn get_rule(state: &GameStateT, idx: u32) -> u32 {
         MJRL_FURITENREACH => state.rule.furiten_riichi_type,
         MJRL_KARATEN => state.rule.enable_keiten as u32,
         MJRL_PINZUMO => 1,
-        MJRL_NOTENOYANAGARE => state.rule.oyanagare_type as u32,
-        MJRL_KANINREACH => state.rule.kan_in_riichi as u32,
+        MJRL_NOTENOYANAGARE => state.rule.oyanagare_type,
+        MJRL_KANINREACH => state.rule.kan_in_riichi,
         MJRL_TOPOYAAGARIEND => state.rule.enable_agariyame as u32,
         MJRL_77MANGAN => state.rule.enable_kiriage as u32,
         MJRL_DBLRONCHONBO => 0,
@@ -90,7 +90,7 @@ unsafe fn mjsend_message_impl(
     param2: usize,
     pstate: &mut PaiState,
 ) -> usize {
-    let taku: &GameStateT = &G_STATE;
+    let taku: &GameStateT = unsafe { &*std::ptr::addr_of!(G_STATE) };
 
     /*
     println!(
@@ -102,7 +102,7 @@ unsafe fn mjsend_message_impl(
     match message as u32 {
         MJMI_GETRULE => get_rule(taku, param1 as u32).try_into().unwrap(),
         MJMI_GETTEHAI => {
-            let map = &G_STRUCTURE_TYPE;
+            let map = unsafe { &*std::ptr::addr_of!(G_STRUCTURE_TYPE) };
 
             let v = map.get(&inst);
 
@@ -117,7 +117,7 @@ unsafe fn mjsend_message_impl(
                         for i in 0..player.tehai_len as usize {
                             tehai.tehai[i] = player.tehai[i].pai_num as u32;
                         }
-                        tehai.tehai_max = player.tehai_len as u32;
+                        tehai.tehai_max = player.tehai_len;
                         tehai.minkan_max = 0;
                         tehai.minkou_max = 0;
                         tehai.minshun_max = 0;
@@ -136,7 +136,7 @@ unsafe fn mjsend_message_impl(
                 for i in 0..player.tehai_len as usize {
                     tehai.tehai[i] = player.tehai[i].pai_num as u32;
                 }
-                tehai.tehai_max = player.tehai_len as u32;
+                        tehai.tehai_max = player.tehai_len;
                 tehai.minkan_max = 0;
                 tehai.minkou_max = 0;
                 tehai.minshun_max = 0;
@@ -152,7 +152,7 @@ unsafe fn mjsend_message_impl(
             let mut v_fulo: Vec<Mentsu> = Vec::new();
             let mut num = 0;
 
-            if p == std::ptr::null() {
+            if p.is_null() {
                 let player = &taku.players[taku.teban as usize];
 
                 pstate.init(&player.tehai[0..player.tehai_len as usize]);
@@ -251,7 +251,7 @@ unsafe fn mjsend_message_impl(
                     pstate.hai_count_m[i] -= 1;
                 }
 
-                if all_mentsu.len() > 0 {
+                if !all_mentsu.is_empty() {
                     *p2 = 1;
                     num += 1;
                 } else {
@@ -268,7 +268,7 @@ unsafe fn mjsend_message_impl(
 
             let mut v_fulo: Vec<Mentsu> = Vec::new();
 
-            if p == std::ptr::null_mut() {
+            if p.is_null() {
                 let player = &taku.players[taku.teban as usize];
 
                 pstate.init(&player.tehai[0..player.tehai_len as usize]);
@@ -365,7 +365,7 @@ unsafe fn mjsend_message_impl(
             }
         }
         MJMI_GETKAWA => {
-            let idx = (param1 & 0xFFFF) as usize;
+            let idx = param1 & 0xFFFF;
             let player = &taku.players[idx];
             let mut p: *mut u32 = std::ptr::with_exposed_provenance_mut::<u32>(param2);
 
@@ -377,7 +377,7 @@ unsafe fn mjsend_message_impl(
             player.kawahai_len.try_into().unwrap()
         }
         MJMI_GETKAWAEX => {
-            let idx = (param1 & 0xFFFF) as usize;
+            let idx = param1 & 0xFFFF;
             let player = &taku.players[idx];
             let mut p: *mut MJIKawahai =
                 std::ptr::with_exposed_provenance_mut::<MJIKawahai>(param2);
@@ -397,11 +397,8 @@ unsafe fn mjsend_message_impl(
             let c_str: &CStr = CStr::from_ptr(p_cstr);
             println!("fukidashi");
 
-            match c_str.to_str() {
-                Ok(_str_slice) => {
-                    // println!("{}", str_slice);
-                }
-                _ => {}
+            if let Ok(_str_slice) = c_str.to_str() {
+                // println!("{}", str_slice);
             }
 
             0
@@ -409,26 +406,26 @@ unsafe fn mjsend_message_impl(
         MJMI_GETDORA => {
             let mut p: *mut u32 = std::ptr::with_exposed_provenance_mut::<u32>(param1);
             let dora = taku.get_dora();
-            for i in 0..dora.len() as usize {
-                *p = dora[i].pai_num as u32;
+            for pai in dora {
+                *p = pai.pai_num as u32;
                 p = p.add(1);
             }
-            dora.len().try_into().unwrap()
+            dora.len()
         }
         MJMI_GETHAIREMAIN => taku.remain().try_into().unwrap(),
         MJMI_GETVISIBLEHAIS => {
             let player = &taku.players[taku.teban as usize];
 
             player.tehai[0..player.tehai_len as usize]
-                .into_iter()
-                .chain(player.kawahai[0..player.kawahai_len as usize].into_iter())
-                .chain(taku.get_dora().into_iter())
+                .iter()
+                .chain(player.kawahai[0..player.kawahai_len as usize].iter())
+                .chain(taku.get_dora())
                 .chain(player.get_tsumohai().iter())
                 .filter(|x| x.pai_num == param1 as u8)
                 .count()
         }
         MJMI_SETSTRUCTTYPE => {
-            let map = &mut G_STRUCTURE_TYPE;
+            let map = unsafe { &mut *std::ptr::addr_of_mut!(G_STRUCTURE_TYPE) };
             map.insert(inst, param1);
             0
         }
@@ -438,6 +435,9 @@ unsafe fn mjsend_message_impl(
     }
 }
 
+/// # Safety
+///
+/// この関数はFIIから呼び出されるため、引数が有効なポインタ・値であることを前提とします。
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub unsafe extern "system" fn mjsend_message(
     inst: *mut c_void,
@@ -453,6 +453,9 @@ pub unsafe extern "system" fn mjsend_message(
     mjsend_message_impl(inst, message, param1, param2, &mut pstate)
 }
 
+/// # Safety
+///
+/// この関数はFIIから呼び出されるため、引数が有効なポインタ・値であることを前提とします。
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub unsafe fn mjsend_message(
     inst: *mut c_void,

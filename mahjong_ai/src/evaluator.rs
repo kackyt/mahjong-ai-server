@@ -64,12 +64,12 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
             }
 
             let mut pstate = PaiState::default();
-            for i in 0..34 {
+            for (i, &count) in hand_counts.iter().enumerate() {
                 match i {
-                    0..=8 => pstate.hai_count_m[i] = hand_counts[i] as i32,
-                    9..=17 => pstate.hai_count_p[i - 9] = hand_counts[i] as i32,
-                    18..=26 => pstate.hai_count_s[i - 18] = hand_counts[i] as i32,
-                    27..=33 => pstate.hai_count_z[i - 27] = hand_counts[i] as i32,
+                    0..=8 => pstate.hai_count_m[i] = count as i32,
+                    9..=17 => pstate.hai_count_p[i - 9] = count as i32,
+                    18..=26 => pstate.hai_count_s[i - 18] = count as i32,
+                    27..=33 => pstate.hai_count_z[i - 27] = count as i32,
                     _ => {}
                 }
             }
@@ -126,16 +126,18 @@ mod tests {
     #[test]
     #[ignore]
     fn test_eval_sutehai_basic() {
-        let mut game_state = GameStateT::default();
-        game_state.players = [
-            PlayerT::default(),
-            PlayerT::default(),
-            PlayerT::default(),
-            PlayerT::default(),
-        ];
-        game_state.teban = 0;
+        let mut game_state = GameStateT {
+            players: [
+                PlayerT::default(),
+                PlayerT::default(),
+                PlayerT::default(),
+                PlayerT::default(),
+            ],
+            teban: 0,
+            ..Default::default()
+        };
 
-        let mut player = &mut game_state.players[0];
+        let player = &mut game_state.players[0];
         let tiles = vec![0, 1, 2, 3, 4, 5, 9, 10, 11, 18, 19, 20, 27];
         for (i, t) in tiles.iter().enumerate() {
             player.tehai[i] = PaiT {

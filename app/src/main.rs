@@ -103,16 +103,14 @@ extern "system" fn dummy_func(
 fn find_dll_files() -> Vec<String> {
     let mut files = vec![];
     if let Ok(entries) = std::fs::read_dir(env::current_dir().unwrap()) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        if let Some(ext) = entry.path().extension() {
-                            if ext == "dll" {
-                                if let Some(file_name) = entry.path().file_stem() {
-                                    if let Some(file_name) = file_name.to_str() {
-                                        files.push(file_name.to_string());
-                                    }
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                if file_type.is_file() {
+                    if let Some(ext) = entry.path().extension() {
+                        if ext == "dll" {
+                            if let Some(file_name) = entry.path().file_stem() {
+                                if let Some(file_name) = file_name.to_str() {
+                                    files.push(file_name.to_string());
                                 }
                             }
                         }
@@ -124,7 +122,7 @@ fn find_dll_files() -> Vec<String> {
     files
 }
 
-fn yaku_to_string(arr: &Vec<(String, i32)>) -> String {
+fn yaku_to_string(arr: &[(String, i32)]) -> String {
     arr.iter()
         .map(|(yaku, han)| format!("{} {}翻", yaku, han))
         .collect::<Vec<String>>()
@@ -132,7 +130,7 @@ fn yaku_to_string(arr: &Vec<(String, i32)>) -> String {
 }
 
 unsafe fn player_is_riichi(player_num: usize) -> bool {
-    let state = &G_STATE;
+    let state = unsafe { &*std::ptr::addr_of!(G_STATE) };
     state.players[player_num].is_riichi
 }
 
@@ -143,7 +141,7 @@ impl App {
     }
 }
 
-const FONT_BYTES: &'static [u8] = include_bytes!("../fonts/Mamelon-5-Hi-Regular.otf");
+const FONT_BYTES: &[u8] = include_bytes!("../fonts/Mamelon-5-Hi-Regular.otf");
 
 impl Application for App {
     fn title(&self) -> String {
@@ -154,7 +152,7 @@ impl Application for App {
         match event {
             // ゲームを開始します。
             Message::Start => unsafe {
-                let state = &mut G_STATE;
+                let state = &mut *std::ptr::addr_of_mut!(G_STATE);
                 let sendmes_ptr = mjsend_message as *const ();
                 let dummy: [i32; 4] = [4, 5, 6, 7];
 
@@ -188,13 +186,13 @@ impl Application for App {
                                         inst,
                                         MJPI_INITIALIZE.try_into().unwrap(),
                                         0,
-                                        std::mem::transmute(sendmes_ptr),
+                                        sendmes_ptr as usize,
                                     );
                                     (ai_symbol)(inst, MJPI_STARTGAME.try_into().unwrap(), 0, 0);
                                     (ai_symbol)(
                                         inst,
                                         MJPI_BASHOGIME.try_into().unwrap(),
-                                        std::mem::transmute(dummy.as_ptr()),
+                                        dummy.as_ptr() as usize,
                                         0,
                                     );
 
@@ -267,22 +265,20 @@ impl Application for App {
 
                 // Trigger AI if it's AI's turn (only in 4P Vs AI)
                 let teban = state.teban as usize;
-                if self.game_mode == crate::types::GameMode::FourPlayerVsAI && teban != 0 {
-                    if teban - 1 < self.ai_instances.len() {
-                        let ai = self.ai_instances[teban - 1].clone();
-                        let tsumohai_num: usize =
-                            state.players[teban].tsumohai.pai_num.try_into().unwrap();
-                        return Command::perform(ai.ai_next(tsumohai_num), |r| {
-                            Message::AICommand(r)
-                        });
-                    }
+                if self.game_mode == crate::types::GameMode::FourPlayerVsAI
+                    && teban != 0
+                    && teban - 1 < self.ai_instances.len()
+                {
+                    let ai = self.ai_instances[teban - 1].clone();
+                    let tsumohai_num: usize = state.players[teban].tsumohai.pai_num.into();
+                    return Command::perform(ai.ai_next(tsumohai_num), Message::AICommand);
                 }
 
                 Command::none()
             },
             // プレイヤー（人間）が打牌した時の処理です。
             Message::Dahai(index) => unsafe {
-                let state = &mut G_STATE;
+                let state = &mut *std::ptr::addr_of_mut!(G_STATE);
                 let state_riichi = player_is_riichi(0);
                 if index < state.players[0].tehai_len as usize {
                     let pai = &state.players[0].tehai[index];
@@ -320,19 +316,13 @@ impl Application for App {
                             let next_teban = state.teban as usize;
                             if self.game_mode == crate::types::GameMode::FourPlayerVsAI
                                 && next_teban != 0
+                                && next_teban - 1 < self.ai_instances.len()
                             {
-                                if next_teban - 1 < self.ai_instances.len() {
-                                    debug!("Triggering AI for P{}", next_teban);
-                                    let ai = self.ai_instances[next_teban - 1].clone();
-                                    let tsumohai_num: usize = state.players[next_teban]
-                                        .tsumohai
-                                        .pai_num
-                                        .try_into()
-                                        .unwrap();
-                                    return Command::perform(ai.ai_next(tsumohai_num), |r| {
-                                        Message::AICommand(r)
-                                    });
-                                }
+                                debug!("Triggering AI for P{}", next_teban);
+                                let ai = self.ai_instances[next_teban - 1].clone();
+                                let tsumohai_num: usize =
+                                    state.players[next_teban].tsumohai.pai_num.into();
+                                return Command::perform(ai.ai_next(tsumohai_num), Message::AICommand);
                             }
                         }
                     }
@@ -346,7 +336,7 @@ impl Application for App {
             // ツモ和了ボタンが満たされた時の処理です。
             Message::Tsumo => {
                 unsafe {
-                    let state = &mut G_STATE;
+                    let state = &mut *std::ptr::addr_of_mut!(G_STATE);
                     let result = state.tsumo_agari(&mut self.play_log);
 
                     match result {
@@ -400,7 +390,7 @@ impl Application for App {
                 let flag = ret & 0xFF80;
 
                 {
-                    let state = &mut G_STATE;
+                    let state = &mut *std::ptr::addr_of_mut!(G_STATE);
 
                     if flag == MJPIR_TSUMO {
                         let score: [i32; 4] = [0, 0, 0, 0];
@@ -432,7 +422,7 @@ impl Application for App {
                                 ai.inst,
                                 MJPI_ENDKYOKU.try_into().unwrap(),
                                 MJEK_RYUKYOKU.try_into().unwrap(),
-                                std::mem::transmute(score.as_ptr()),
+                                score.as_ptr() as usize,
                             );
                         }
                         Command::none()
@@ -481,7 +471,7 @@ impl Application for App {
                                         debug!("DISCARDER: {}", discarder_idx);
                                         debug!("DISCARD: {}", self.sutehai);
 
-                                        if let Some(_) = state.check_ron(0, &self.sutehai) {
+                                        if state.check_ron(0, &self.sutehai).is_some() {
                                             self.can_ron_flag = true;
                                         }
 
@@ -495,10 +485,8 @@ impl Application for App {
                                         }
                                         // 3. Check CHI (Only from Kamicha/Left)
                                         // discarder_idx == 3 means Left relative to P0
-                                        if discarder_idx == 3 {
-                                            if !state.check_chii(0, &self.sutehai).is_empty() {
-                                                self.can_chi_flag = true;
-                                            }
+                                        if discarder_idx == 3 && !state.check_chii(0, &self.sutehai).is_empty() {
+                                            self.can_chi_flag = true;
                                         }
 
                                         debug!("can_ron_flag: {}, can_pon_flag: {}, can_chi_flag: {}, can_kan_flag: {}", self.can_ron_flag, self.can_pon_flag, self.can_chi_flag, self.can_kan_flag);
@@ -521,19 +509,17 @@ impl Application for App {
                                     // Check if next player is AI
                                     if self.game_mode == crate::types::GameMode::FourPlayerVsAI
                                         && next_teban != 0
+                                        && next_teban - 1 < self.ai_instances.len()
                                     {
-                                        if next_teban - 1 < self.ai_instances.len() {
-                                            let ai = self.ai_instances[next_teban - 1].clone();
-                                            let tsumohai_num: usize = state.players[next_teban]
-                                                .tsumohai
-                                                .pai_num
-                                                .try_into()
-                                                .unwrap();
-                                            return Command::perform(
-                                                ai.ai_next(tsumohai_num),
-                                                |r| Message::AICommand(r),
-                                            );
-                                        }
+                                        let ai = self.ai_instances[next_teban - 1].clone();
+                                        let tsumohai_num: usize = state.players[next_teban]
+                                            .tsumohai
+                                            .pai_num
+                                            .into();
+                                        return Command::perform(
+                                            ai.ai_next(tsumohai_num),
+                                            Message::AICommand,
+                                        );
                                     }
                                     Command::none()
                                 }
@@ -558,7 +544,7 @@ impl Application for App {
             // ロンボタンが押された時の処理です。
             Message::Ron => unsafe {
                 // Execute Ron
-                let state = &mut G_STATE;
+                let state = &mut *std::ptr::addr_of_mut!(G_STATE);
 
                 if let Ok(agari) = state.ron_agari(&mut self.play_log, 0, 0, &self.sutehai) {
                     self.state = AppState::HandEnded;
@@ -584,23 +570,18 @@ impl Application for App {
                 self.can_kan_flag = false;
 
                 // Proceed to next turn
-                let state = &mut G_STATE;
+                let state = &mut *std::ptr::addr_of_mut!(G_STATE);
                 let _ = state.tsumo(&mut self.play_log);
                 let next_teban = state.teban as usize;
 
                 // Check if next player is AI
-                if self.game_mode == crate::types::GameMode::FourPlayerVsAI && next_teban != 0 {
-                    if next_teban - 1 < self.ai_instances.len() {
-                        let ai = self.ai_instances[next_teban - 1].clone();
-                        let tsumohai_num: usize = state.players[next_teban]
-                            .tsumohai
-                            .pai_num
-                            .try_into()
-                            .unwrap();
-                        return Command::perform(ai.ai_next(tsumohai_num), |r| {
-                            Message::AICommand(r)
-                        });
-                    }
+                if self.game_mode == crate::types::GameMode::FourPlayerVsAI
+                    && next_teban != 0
+                    && next_teban - 1 < self.ai_instances.len()
+                {
+                    let ai = self.ai_instances[next_teban - 1].clone();
+                    let tsumohai_num: usize = state.players[next_teban].tsumohai.pai_num.into();
+                    return Command::perform(ai.ai_next(tsumohai_num), Message::AICommand);
                 }
                 Command::none()
             },
@@ -613,7 +594,7 @@ impl Application for App {
                 self.can_kan_flag = false;
 
                 unsafe {
-                    let state = &mut G_STATE;
+                    let state = &mut *std::ptr::addr_of_mut!(G_STATE);
                     let cands = state.check_pon(0, &self.sutehai);
                     if let Some(mentsu) = cands.first() {
                         if let Err(e) = state.operate_fulo(&mut self.play_log, 0, mentsu.clone()) {
@@ -634,7 +615,7 @@ impl Application for App {
                 self.can_kan_flag = false;
 
                 unsafe {
-                    let state = &mut G_STATE;
+                    let state = &mut *std::ptr::addr_of_mut!(G_STATE);
                     let cands = state.check_chii(0, &self.sutehai);
                     // TODO: Select which Chi if multiple. Default to first.
                     if let Some(mentsu) = cands.first() {
@@ -654,7 +635,7 @@ impl Application for App {
                 self.can_kan_flag = false;
 
                 unsafe {
-                    let state = &mut G_STATE;
+                    let state = &mut *std::ptr::addr_of_mut!(G_STATE);
                     let cands = state.check_minkan(0, &self.sutehai);
                     if let Some(mentsu) = cands.first() {
                         if let Err(e) = state.operate_fulo(&mut self.play_log, 0, mentsu.clone()) {
@@ -666,7 +647,7 @@ impl Application for App {
             }
             // 次の局へ進む処理（Next Handボタン）です。親の交代やゲーム終了判定も行います。
             Message::NextHand => unsafe {
-                let state = &mut G_STATE;
+                let state = &mut *std::ptr::addr_of_mut!(G_STATE);
 
                 if self.is_ryuukyoku {
                     state.next_kyoku(&self.last_agari_players, true);
@@ -727,7 +708,7 @@ impl Application for App {
         }
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message> {
         let content: Element<_> = match self.state {
             AppState::Created => title_page::view(&self.ai_files, &self.ai_paths, self.game_mode),
             AppState::Started | AppState::HandEnded | AppState::GameFinished => game_page::view(
