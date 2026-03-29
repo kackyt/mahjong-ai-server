@@ -30,7 +30,7 @@ pub fn shanten(mut n_mentsu: i32, mut n_tahtsu: i32, mut n_koritsu: i32, b_atama
         n_tahtsu += 1;
     }
 
-    return 13 - n_mentsu * 3 - n_tahtsu * 2 - n_koritsu;
+    13 - n_mentsu * 3 - n_tahtsu * 2 - n_koritsu
 }
 
 pub fn tahtsu_koritsu_count(hai_count: &[i32; 9]) -> [(i32, i32, i32); 2] {
@@ -166,7 +166,7 @@ fn all_of_suit_mentsu(suit: usize, hai_count: &mut [i32; 9], n: usize) -> Vec<Ve
 
     // println!("s{} {}: {:?} {:?}\r", suit, n, shuntsu, koutsu);
 
-    if shuntsu.len() == 0 && koutsu.len() == 0 {
+    if shuntsu.is_empty() && koutsu.is_empty() {
         vec![vec![]]
     } else {
         [shuntsu, koutsu].concat()

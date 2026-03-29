@@ -22,16 +22,7 @@ impl Display for PaiT {
 // 牌の並び替え
 impl PartialOrd for PaiT {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.pai_num.partial_cmp(&other.pai_num) {
-            Some(core::cmp::Ordering::Equal) => {}
-            ord => return ord,
-        }
-        match self.id.partial_cmp(&other.id) {
-            Some(core::cmp::Ordering::Equal) => {}
-            ord => return ord,
-        }
-
-        None
+        Some(self.cmp(other))
     }
 }
 
@@ -129,18 +120,18 @@ impl From<&[u8]> for FixedStringT {
     }
 }
 
-impl Into<Vec<u8>> for FixedStringT {
-    fn into(self) -> Vec<u8> {
+impl From<FixedStringT> for Vec<u8> {
+    fn from(val: FixedStringT) -> Self {
         let mut t: Vec<u8> = Vec::new();
 
-        t.extend_from_slice(&self.n1);
-        t.extend_from_slice(&self.n2);
-        t.extend_from_slice(&self.n3);
-        t.extend_from_slice(&self.n4);
-        t.extend_from_slice(&self.n5);
-        t.extend_from_slice(&self.n6);
-        t.extend_from_slice(&self.n7);
-        t.extend_from_slice(&self.n8);
+        t.extend_from_slice(&val.n1);
+        t.extend_from_slice(&val.n2);
+        t.extend_from_slice(&val.n3);
+        t.extend_from_slice(&val.n4);
+        t.extend_from_slice(&val.n5);
+        t.extend_from_slice(&val.n6);
+        t.extend_from_slice(&val.n7);
+        t.extend_from_slice(&val.n8);
 
         t
     }
@@ -154,9 +145,9 @@ impl From<&[u8]> for FixedString {
     }
 }
 
-impl Into<Vec<u8>> for FixedString {
-    fn into(self) -> Vec<u8> {
-        let t = self.unpack();
+impl From<FixedString> for Vec<u8> {
+    fn from(val: FixedString) -> Self {
+        let t = val.unpack();
 
         t.into()
     }
@@ -239,7 +230,7 @@ impl TakuControl for Taku {
 
     fn load(list: &[u32]) -> Self {
         let hai_array: Vec<Pai> = list
-            .into_iter()
+            .iter()
             .map(|x| Pai::new((x >> 2) as u8, (x & 3) as u8, false, false, false))
             .collect();
         let mut dst = [Pai::new(0, 0, false, false, false); 32];
@@ -313,8 +304,8 @@ impl TakuControl for TakuT {
         let st = (r.start / 32, r.start % 32);
         let ed = (r.end / 32, r.end % 32);
         let mut v: Vec<PaiT> = Vec::new();
-        let mut rstart = 0usize;
-        let mut rend = 0usize;
+        let mut rstart: usize;
+        let mut rend: usize;
 
         if st.0 == 0 {
             rstart = st.1;
@@ -323,7 +314,7 @@ impl TakuControl for TakuT {
             } else {
                 rend = self.n1.len();
             }
-            let mut nx: Vec<PaiT> = self.n1[rstart..rend].iter().cloned().collect();
+            let mut nx: Vec<PaiT> = self.n1[rstart..rend].to_vec();
 
             v.append(&mut nx);
         }
@@ -339,7 +330,7 @@ impl TakuControl for TakuT {
             } else {
                 rend = self.n2.len();
             }
-            let mut nx: Vec<PaiT> = self.n2[rstart..rend].iter().cloned().collect();
+            let mut nx: Vec<PaiT> = self.n2[rstart..rend].to_vec();
 
             v.append(&mut nx);
         }
@@ -355,7 +346,7 @@ impl TakuControl for TakuT {
             } else {
                 rend = self.n3.len();
             }
-            let mut nx: Vec<PaiT> = self.n3[rstart..rend].iter().cloned().collect();
+            let mut nx: Vec<PaiT> = self.n3[rstart..rend].to_vec();
 
             v.append(&mut nx);
         }
@@ -371,7 +362,7 @@ impl TakuControl for TakuT {
             } else {
                 rend = self.n4.len();
             }
-            let mut nx: Vec<PaiT> = self.n4[rstart..rend].iter().cloned().collect();
+            let mut nx: Vec<PaiT> = self.n4[rstart..rend].to_vec();
 
             v.append(&mut nx);
         }
@@ -387,7 +378,7 @@ impl TakuControl for TakuT {
             } else {
                 rend = self.n5.len();
             }
-            let mut nx: Vec<PaiT> = self.n5[rstart..rend].iter().cloned().collect();
+            let mut nx: Vec<PaiT> = self.n5[rstart..rend].to_vec();
 
             v.append(&mut nx);
         }

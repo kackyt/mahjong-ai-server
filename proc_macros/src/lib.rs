@@ -2,7 +2,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Variant};
+use syn::{parse_macro_input, Data, DeriveInput};
 
 #[proc_macro_derive(IncrementalEnum, attributes(base, incr))]
 pub fn incremental_enum(input: TokenStream) -> TokenStream {
