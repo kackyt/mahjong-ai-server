@@ -12,15 +12,15 @@ pub fn view<'a>(mentsu_list: &[MentsuT]) -> Element<'a, Message> {
         let mut meld_row = Row::new().align_items(iced::Alignment::End);
 
         let tiles = &mentsu.pai_list;
-        let len = mentsu.pai_len as usize;
+        let len = (mentsu.pai_len as usize).min(tiles.len());
 
         let mk_img = |pai_num: u32| {
             let handle = images::get(pai_num, 0);
             image(handle)
         };
 
-        for i in 0..len {
-            meld_row = meld_row.push(mk_img(tiles[i].pai_num as u32));
+        for pai in tiles.iter().take(len) {
+            meld_row = meld_row.push(mk_img(pai.pai_num as u32));
         }
 
         elements.push(meld_row.into());

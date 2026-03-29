@@ -13,8 +13,9 @@ pub fn view<'a>(
     is_tsumo: bool,
     is_interactive: bool,
     is_opponent: bool,
+    angle: u16,
 ) -> Element<'a, Message> {
-    let mk_img = |pai_num: u32| images::get(pai_num, 0);
+    let mk_img = |pai_num: u32| images::get(pai_num, angle);
 
     let mut ui_tehai: Vec<Element<'a, Message>> = tehai[0..tehai_len]
         .iter()

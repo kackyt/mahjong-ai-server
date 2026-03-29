@@ -78,6 +78,16 @@ impl AI {
     }
 }
 
+impl Drop for AI {
+    fn drop(&mut self) {
+        if !self.inst.is_null() {
+            unsafe {
+                libc::free(self.inst);
+            }
+        }
+    }
+}
+
 extern "system" fn dummy_func(
     _inst: *mut std::ffi::c_void,
     _message: usize,
@@ -677,9 +687,9 @@ impl Application for App {
                     scores.sort_by(|a, b| b.1.cmp(&a.1));
 
                     // Oka
-                    scores[0].1 += 20000;
-                    // Update actual player score
+                    // オカを1位に加算（実スコアを更新し、表示用もそれに合わせる）
                     state.players[scores[0].0].score += 20000;
+                    scores[0].1 = state.players[scores[0].0].score;
 
                     let msg = scores
                         .iter()

@@ -28,7 +28,11 @@ pub fn get_discard(json_state: String) -> String {
 }
 
 fn calculate_discard(tehai: &[u8]) -> Option<usize> {
-    let mut min_shanten = 999;
+    if tehai.is_empty() || tehai.iter().any(|&p| p >= 34) {
+        return None;
+    }
+
+    let mut min_shanten = i32::MAX;
     let mut best_discard = None;
 
     // Iterate over each tile in tehai to try discarding it
