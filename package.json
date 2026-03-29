@@ -1,0 +1,19 @@
+{
+  "name": "mahjong-ai-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.19.0",
+  "devDependencies": {
+    "@fission-ai/openspec": "^1.2.0"
+  },
+  "dependencies": {
+    "rulesync": "^7.23.0"
+  }
+}
