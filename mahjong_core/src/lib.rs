@@ -10,3 +10,8 @@ pub mod mahjong_generated;
 #[cfg(feature = "std")]
 pub mod play_log;
 pub mod shanten;
+
+#[cfg(feature = "ecs")]
+pub mod components;
+#[cfg(feature = "ecs")]
+pub mod systems;

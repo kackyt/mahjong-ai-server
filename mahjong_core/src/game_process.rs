@@ -233,25 +233,16 @@ impl GameStateT {
 
     /// ツモを行います。
     pub fn tsumo(&mut self, play_log: &mut PlayLog) -> anyhow::Result<()> {
-        let player = &mut self.players[self.teban as usize];
-        player.is_tsumo = true;
-
+        let mut world = crate::components::world::MahjongWorld::from_game_state(self);
+        crate::systems::tsumo::run_tsumo(&mut world, play_log)?;
+        world.to_game_state(self);
+        
+        // Ensure cursol compatibility for non-ecs things
         if self.is_non_duplicate {
-            player.tsumohai = self.taku.get(self.taku_cursol as usize)?;
+            self.next_cursol(); // Keep tracking logic valid
         } else {
-            player.tsumohai = self.taku.get(player.cursol as usize)?;
+            self.players[self.teban as usize].cursol += 1;
         }
-
-        play_log.append_actions_log(
-            self.kyoku_id,
-            self.teban as i32,
-            self.seq as i32,
-            String::from("tsumo"),
-            player.tsumohai.get_pai_id(),
-        );
-        self.seq += 1;
-
-        self.next_cursol();
 
         Ok(())
     }
@@ -269,37 +260,15 @@ impl GameStateT {
         index: usize,
         is_riichi: bool,
     ) -> anyhow::Result<PaiT> {
-        let player = &mut self.players[self.teban as usize];
-
+        let teban = self.teban as usize;
+        let player = &mut self.players[teban];
         let tehai_len = player.tehai_len as usize;
-
-        // ツモ切りの判定: indexがtehai_lenと等しい
         let is_tsumogiri = index == tehai_len;
 
-        // インデックスの正当性チェック
         ensure!(index <= tehai_len, "Invalid discard index");
-
-        // 副露後のチェック: is_tsumoがfalseの場合、ツモ切りはできない
         if !player.is_tsumo {
             ensure!(!is_tsumogiri, "Cannot tsumogiri after fulo (no tsumo tile)");
         }
-
-        let mut kawahai = if is_tsumogiri {
-            // ツモ切り
-            player.tsumohai.clone()
-        } else {
-            // 手出し
-            let mut tehai: Vec<PaiT> = player.tehai.to_vec();
-            let p = tehai.remove(index);
-
-            // ツモ番の場合のみ、ツモ牌を手牌に加えてソートする
-            if player.is_tsumo {
-                tehai.push(player.tsumohai.clone());
-                tehai.sort_unstable();
-            }
-            p
-        };
-
         ensure!(
             !player.is_riichi || is_tsumogiri,
             GameProcessError::IllegalSutehaiAfterRiichi
@@ -323,47 +292,19 @@ impl GameStateT {
             player.is_riichi = true;
             player.is_ippatsu = true;
             player.score -= 1000;
-            kawahai.is_riichi = true;
         } else {
             player.is_ippatsu = false;
         }
 
-        // 手牌の更新
-        if !is_tsumogiri {
-            let mut tehai: Vec<PaiT> = player.tehai.iter().take(tehai_len).cloned().collect();
-            tehai.remove(index);
+        let mut world = crate::components::world::MahjongWorld::from_game_state(self);
+        let mut kawahai = crate::systems::sutehai::run_sutehai(&mut world, play_log, index, is_riichi)?;
+        world.to_game_state(self);
 
-            if player.is_tsumo {
-                tehai.push(player.tsumohai.clone());
-                tehai.sort_unstable();
-            }
-
-            // 書き戻し
-            player.tehai.clone_from_slice(&tehai);
-            if !player.is_tsumo {
-                player.tehai_len -= 1;
-            }
-        }
-
-        player.kawahai[player.kawahai_len as usize] = kawahai.clone();
-
-        play_log.append_actions_log(
-            self.kyoku_id,
-            self.teban as i32,
-            self.seq as i32,
-            String::from("sutehai"),
-            player.kawahai[player.kawahai_len as usize].get_pai_id(),
-        );
-        self.seq += 1;
-
-        player.kawahai_len += 1;
-        player.tsumohai = Default::default();
-
-        player.is_tsumo = false;
-        self.teban += 1;
-        if self.teban == self.player_len {
-            self.teban = 0;
-        }
+        // Turn logic (cannot safely map inside sutehai.rs due to player count variability)
+        self.teban = (self.teban + 1) % self.player_len;
+        self.players[teban].kawahai_len += 1;
+        self.players[teban].tsumohai = Default::default();
+        kawahai.is_tsumogiri = is_tsumogiri;
 
         Ok(kawahai)
     }

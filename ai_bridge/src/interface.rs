@@ -10,7 +10,10 @@ use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
     ffi::{c_char, c_void, CStr},
+    sync::Mutex,
 };
+
+use crate::registry::GameRegistry;
 
 use crate::bindings::{
     MJIKawahai, MJITehai, MJITehai1, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA,
@@ -27,6 +30,7 @@ extern crate libc;
 
 // スレッドセーフではない
 pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(Default::default);
+pub static G_REGISTRY: Lazy<Mutex<GameRegistry>> = Lazy::new(|| Mutex::new(GameRegistry::new()));
 pub static mut G_STRUCTURE_TYPE: Lazy<HashMap<*mut c_void, usize>> = Lazy::new(HashMap::new);
 pub type MJPInterfaceFuncP = unsafe extern "system" fn(*mut c_void, usize, usize, usize) -> usize;
 
@@ -90,7 +94,11 @@ unsafe fn mjsend_message_impl(
     param2: usize,
     pstate: &mut PaiState,
 ) -> usize {
-    let taku: &GameStateT = unsafe { &*std::ptr::addr_of!(G_STATE) };
+    let _inst_usize = inst as usize;
+
+    // Convert world to GameStateT for compatibility until the DLL is fully updated.
+    let _taku_fallback: GameStateT = Default::default(); // Not ideal, but we need GameStateT temporarily
+    let taku: &GameStateT = unsafe { &*std::ptr::addr_of!(G_STATE) }; // To be completely replaced when DLL uses ECS directly
 
     /*
     println!(
@@ -136,7 +144,7 @@ unsafe fn mjsend_message_impl(
                 for i in 0..player.tehai_len as usize {
                     tehai.tehai[i] = player.tehai[i].pai_num as u32;
                 }
-                        tehai.tehai_max = player.tehai_len;
+                tehai.tehai_max = player.tehai_len;
                 tehai.minkan_max = 0;
                 tehai.minkou_max = 0;
                 tehai.minshun_max = 0;

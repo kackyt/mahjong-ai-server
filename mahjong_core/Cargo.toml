@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 anyhow = "1.0.79"
+hecs = { version = "0.10", features = ["macros"], optional = true }
 arrow-array = { version = "53.0.0", optional = true }
 arrow-schema = "53.0.0"
 chrono = { version = "0.4.33", optional = true }
@@ -20,4 +21,5 @@ walkdir = { version = "2.4.0", optional = true }
 [features]
 default = ["std"]
 std = ["dep:parquet", "dep:arrow-array", "dep:walkdir", "dep:chrono", "dep:rand", "dep:uuid", "itertools/use_std"]
+ecs = ["dep:hecs"]
 load-pailist = ["std"]
