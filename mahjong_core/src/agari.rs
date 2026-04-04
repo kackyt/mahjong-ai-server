@@ -90,32 +90,27 @@ fn is_penchan(mentsu: &Mentsu) -> bool {
 }
 
 pub trait AgariBehavior {
-    fn get_agari(
-        &self,
-        who: usize,
-        mentsu: &Vec<Mentsu>,
-        fulo: &Vec<Mentsu>,
-        is_ron: bool,
-    ) -> AgariState;
+    fn get_agari(&self, who: usize, mentsu: &[Mentsu], fulo: &[Mentsu], is_ron: bool)
+        -> AgariState;
     fn get_condition_yaku(&self, who: usize, state: &AgariState) -> Vec<(String, i32)>;
     fn get_dora_yaku(
         &self,
         who: usize,
-        mentsu: &Vec<Mentsu>,
-        fulo: &Vec<Mentsu>,
+        mentsu: &[Mentsu],
+        fulo: &[Mentsu],
         nukidora: usize,
     ) -> Vec<(String, i32)>;
     fn get_best_agari(
         &self,
         who: usize,
-        mentsu: &Vec<Vec<Mentsu>>,
-        fulo: &Vec<Mentsu>,
+        mentsu: &[Vec<Mentsu>],
+        fulo: &[Mentsu],
         nukidora: usize,
         is_ron: bool,
     ) -> anyhow::Result<Agari>;
 }
 
-pub fn add_machi_to_mentsu(mentsu: &Vec<Vec<Mentsu>>, p: &Pai) -> Vec<Vec<Mentsu>> {
+pub fn add_machi_to_mentsu(mentsu: &[Vec<Mentsu>], p: &Pai) -> Vec<Vec<Mentsu>> {
     let mut result = Vec::new();
 
     // 各mentsu_vecに対して処理を行う
@@ -146,7 +141,7 @@ pub fn add_machi_to_mentsu(mentsu: &Vec<Vec<Mentsu>>, p: &Pai) -> Vec<Vec<Mentsu
 
                             mentsu_t.pack()
                         } else {
-                            mentsu.clone()
+                            *mentsu
                         }
                     })
                     .collect::<Vec<Mentsu>>();
@@ -197,8 +192,8 @@ impl AgariBehavior for GameStateT {
     fn get_agari(
         &self,
         who: usize,
-        mentsu: &Vec<Mentsu>,
-        fulo: &Vec<Mentsu>,
+        mentsu: &[Mentsu],
+        fulo: &[Mentsu],
         is_ron: bool,
     ) -> AgariState {
         let mut agari = AgariState {
@@ -223,7 +218,7 @@ impl AgariBehavior for GameStateT {
             zikaze: self.get_zikaze(who),
         };
 
-        if fulo.len() > 0 {
+        if !fulo.is_empty() {
             agari.menzen = false;
         }
 
@@ -488,12 +483,10 @@ impl AgariBehavior for GameStateT {
                 if !agari.pinfu {
                     agari.fu += 2;
                 }
-            } else {
-                if agari.menzen {
-                    agari.fu += 10;
-                } else if agari.fu == 20 {
-                    agari.fu = 30;
-                }
+            } else if agari.menzen {
+                agari.fu += 10;
+            } else if agari.fu == 20 {
+                agari.fu = 30;
             }
 
             agari.fu = (agari.fu + 9) / 10 * 10;
@@ -514,8 +507,8 @@ impl AgariBehavior for GameStateT {
     fn get_dora_yaku(
         &self,
         who: usize,
-        mentsu: &Vec<Mentsu>,
-        fulo: &Vec<Mentsu>,
+        mentsu: &[Mentsu],
+        fulo: &[Mentsu],
         nukidora: usize,
     ) -> Vec<(String, i32)> {
         let mut ret = Vec::new();
@@ -567,8 +560,8 @@ impl AgariBehavior for GameStateT {
     fn get_best_agari(
         &self,
         who: usize,
-        mentsu: &Vec<Vec<Mentsu>>,
-        fulo: &Vec<Mentsu>,
+        mentsu: &[Vec<Mentsu>],
+        fulo: &[Mentsu],
         nukidora: usize,
         is_ron: bool,
     ) -> anyhow::Result<Agari> {
@@ -766,12 +759,12 @@ fn is_sanshoku_doukou(state: &AgariState) -> Option<(String, i32)> {
 }
 
 fn is_honroutou(state: &AgariState) -> Option<(String, i32)> {
-    if state.n_shuntsu == 0 && state.n_zihai > 0 {
-        if (state.n_yaochu >= 4 && state.n_koutsu == 4)
-            || (state.n_yaochu >= 7 && state.n_toitsu >= 7)
-        {
-            return Some(("混老頭".to_string(), 2));
-        }
+    if state.n_shuntsu == 0
+        && state.n_zihai > 0
+        && ((state.n_yaochu >= 4 && state.n_koutsu == 4)
+            || (state.n_yaochu >= 7 && state.n_toitsu >= 7))
+    {
+        return Some(("混老頭".to_string(), 2));
     }
 
     None
@@ -1071,25 +1064,26 @@ impl AgariState {
     }
 
     /// 上がり点を計算します
-    pub fn get_agari(&self, yaku: &Vec<(String, i32)>) -> Agari {
+    pub fn get_agari(&self, yaku: &[(String, i32)]) -> Agari {
         let mut agari = Agari::default();
 
-        if yaku.len() == 0 {
+        if yaku.is_empty() {
             return agari;
         }
 
-        let yakumans: i32 = yaku.iter().filter(|x| x.1 < 0).map(|x| x.1).sum();
-        let han: i32 = yaku.iter().filter(|x| x.1 > 0).map(|x| x.1).sum();
+        let han = yaku.iter().map(|x| x.1).sum::<i32>();
+        let yakumans = yaku.iter().filter(|x| x.1 < 0).map(|x| x.1).sum::<i32>();
 
         if yakumans < 0 {
             // 役満の場合
             agari.fu = 0;
+            agari.han = -yakumans * 13;
             agari.score = 32000 * -yakumans;
-            agari.yaku = yaku.clone().into_iter().filter(|x| x.1 < 0).collect();
+            agari.yaku = yaku.iter().filter(|x| x.1 < 0).cloned().collect();
         } else {
             agari.fu = self.fu;
             agari.han = han;
-            agari.yaku = yaku.clone();
+            agari.yaku = yaku.to_vec();
 
             agari.score = if han >= 13 {
                 32000

@@ -1,5 +1,6 @@
 use proc_macros::IncrementalEnum;
 
+#[allow(dead_code)]
 pub const MJ_INTERFACE_VERSION: u32 = 12;
 
 /* #[macro_export]
@@ -47,25 +48,39 @@ define_incremental_enum!(
 
 /* Macro */
 pub const MJPIR_SUTEHAI: u32 = 0x00000100;
+#[allow(dead_code)]
 pub const MJPIR_REACH: u32 = 0x00000200;
+#[allow(dead_code)]
 pub const MJPIR_KAN: u32 = 0x00000400;
+#[allow(dead_code)]
 pub const MJPIR_TSUMO: u32 = 0x00000800;
+#[allow(dead_code)]
 pub const MJPIR_NAGASHI: u32 = 0x00001000;
+#[allow(dead_code)]
 pub const MJPIR_PON: u32 = 0x00002000;
+#[allow(dead_code)]
 pub const MJPIR_CHII1: u32 = 0x00004000;
+#[allow(dead_code)]
 pub const MJPIR_CHII2: u32 = 0x00008000;
+#[allow(dead_code)]
 pub const MJPIR_CHII3: u32 = 0x00010000;
+#[allow(dead_code)]
 pub const MJPIR_MINKAN: u32 = 0x00020000;
+#[allow(dead_code)]
 pub const MJPIR_ANKAN: u32 = 0x00040000;
+#[allow(dead_code)]
 pub const MJPIR_RON: u32 = 0x00080000;
 
+#[allow(dead_code)]
 pub const MJMIR_ERROR: u32 = 0x80000000;
+#[allow(dead_code)]
 pub const MJR_NOTCARED: u32 = 0xffffffff;
 
 /* RULE Macro */
 #[derive(IncrementalEnum, PartialEq, Clone, Copy, Debug)]
 #[base(1)]
 #[incr(1)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms, dead_code)]
 pub enum RULE {
     MJRL_KUITAN = 1,
     MJRL_KANSAKI,

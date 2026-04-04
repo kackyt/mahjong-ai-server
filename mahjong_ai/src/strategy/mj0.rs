@@ -33,6 +33,7 @@ struct MentsuCandidate {
     sum: u32,
 }
 
+#[allow(clippy::type_complexity)]
 pub fn mj0_simulate(
     game_state: &GameStateT,
 ) -> ([f64; 34], [f64; 34], [f64; 34], [f64; 34], [f64; 34]) {
@@ -52,16 +53,12 @@ pub fn mj0_simulate(
     // My Hand
     for i in 0..myself.tehai_len as usize {
         let pai = &myself.tehai[i];
-        if (pai.pai_num as usize) < 34 {
-            if wall_counts[pai.pai_num as usize] > 0 {
-                wall_counts[pai.pai_num as usize] -= 1;
-            }
+        if (pai.pai_num as usize) < 34 && wall_counts[pai.pai_num as usize] > 0 {
+            wall_counts[pai.pai_num as usize] -= 1;
         }
     }
-    if myself.tsumohai.pai_num < 34 {
-        if wall_counts[myself.tsumohai.pai_num as usize] > 0 {
-            wall_counts[myself.tsumohai.pai_num as usize] -= 1;
-        }
+    if myself.tsumohai.pai_num < 34 && wall_counts[myself.tsumohai.pai_num as usize] > 0 {
+        wall_counts[myself.tsumohai.pai_num as usize] -= 1;
     }
 
     // My Melds
@@ -69,10 +66,8 @@ pub fn mj0_simulate(
         let m = &myself.mentsu[i];
         for j in 0..m.pai_len as usize {
             let p = &m.pai_list[j];
-            if (p.pai_num as usize) < 34 {
-                if wall_counts[p.pai_num as usize] > 0 {
-                    wall_counts[p.pai_num as usize] -= 1;
-                }
+            if (p.pai_num as usize) < 34 && wall_counts[p.pai_num as usize] > 0 {
+                wall_counts[p.pai_num as usize] -= 1;
             }
         }
     }
@@ -96,17 +91,15 @@ pub fn mj0_simulate(
 
         // Melds (Opponents)
         if pidx != game_state.teban as usize {
-             for i in 0..player.mentsu_len as usize {
+            for i in 0..player.mentsu_len as usize {
                 let m = &player.mentsu[i];
                 for j in 0..m.pai_len as usize {
                     let p = &m.pai_list[j];
-                    if (p.pai_num as usize) < 34 {
-                        if wall_counts[p.pai_num as usize] > 0 {
-                            wall_counts[p.pai_num as usize] -= 1;
-                        }
+                    if (p.pai_num as usize) < 34 && wall_counts[p.pai_num as usize] > 0 {
+                        wall_counts[p.pai_num as usize] -= 1;
                     }
                 }
-             }
+            }
         }
     }
 
@@ -121,29 +114,27 @@ pub fn mj0_simulate(
     // 3. Remove Dora Indicators
     for i in 0..game_state.dora_len as usize {
         let ind = game_state.taku.n5[i].pai_num as usize;
-        if ind < 34 {
-            if wall_counts[ind] > 0 {
-                wall_counts[ind] -= 1;
-            }
+        if ind < 34 && wall_counts[ind] > 0 {
+            wall_counts[ind] -= 1;
         }
     }
 
     // 4. Monte Carlo Simulation (SIMU_SIZE)
     let mut rng = rand::rng(); // Use new rand syntax if updated, or thread_rng.
-    // rand 0.9 uses rand::rng() probably?
-    // Let's use old style or check docs?
-    // Error said "use of unresolved module rand".
-    // I added rand.
+                               // rand 0.9 uses rand::rng() probably?
+                               // Let's use old style or check docs?
+                               // Error said "use of unresolved module rand".
+                               // I added rand.
 
     for _ in 0..SIMU_SIZE {
-        let mut sim_wall = wall_counts.clone();
+        let mut sim_wall = wall_counts;
 
         let mut opponent_hands_mentsu = [Vec::new(), Vec::new(), Vec::new()];
 
         let mut initial_mentsu_count = [0; 3];
-        for i in 0..3 {
+        for (i, count) in initial_mentsu_count.iter_mut().enumerate() {
             let target_seat = (game_state.teban as usize + i + 1) % 4;
-            initial_mentsu_count[i] = game_state.players[target_seat].mentsu_len;
+            *count = game_state.players[target_seat].mentsu_len;
         }
 
         let mut current_mentsu_count = initial_mentsu_count;
@@ -151,7 +142,9 @@ pub fn mj0_simulate(
         let mut attempts = 0;
         loop {
             attempts += 1;
-            if attempts > 100 { break; }
+            if attempts > 100 {
+                break;
+            }
 
             let mut done = true;
             for j in 0..3 {
@@ -168,7 +161,8 @@ pub fn mj0_simulate(
                         let p2 = p1 + 1;
                         let p3 = p1 + 2;
 
-                        let c = (sim_wall[p1] as u32) * (sim_wall[p2] as u32) * (sim_wall[p3] as u32);
+                        let c =
+                            (sim_wall[p1] as u32) * (sim_wall[p2] as u32) * (sim_wall[p3] as u32);
                         if c > 0 {
                             candidates.push(MentsuCandidate {
                                 tiles: [p1 as u8, p2 as u8, p3 as u8],
@@ -180,8 +174,8 @@ pub fn mj0_simulate(
                     }
 
                     // Koutsu
-                    for k in 0..34 {
-                        if sim_wall[k] >= 3 {
+                    for (k, &count) in sim_wall.iter().enumerate() {
+                        if count >= 3 {
                             candidates.push(MentsuCandidate {
                                 tiles: [k as u8, k as u8, k as u8],
                                 is_shuntsu: false,
@@ -209,17 +203,19 @@ pub fn mj0_simulate(
                     sim_wall[selected.tiles[1] as usize] -= 1;
                     sim_wall[selected.tiles[2] as usize] -= 1;
 
-                    opponent_hands_mentsu[j].push(selected.clone());
+                    opponent_hands_mentsu[j].push(*selected);
                     current_mentsu_count[j] += 1;
                 }
             }
-            if done { break; }
+            if done {
+                break;
+            }
         }
 
-        for j in 0..3 {
+        for (j, opp_mentsu) in opponent_hands_mentsu.iter().enumerate() {
             let mut pairs = Vec::new();
-            for k in 0..34 {
-                if sim_wall[k] >= 2 {
+            for (k, &count) in sim_wall.iter().enumerate() {
+                if count >= 2 {
                     pairs.push(k);
                 }
             }
@@ -235,23 +231,30 @@ pub fn mj0_simulate(
 
                 if comp_idx == 4 {
                     machi[pair] = true;
-                } else if comp_idx < opponent_hands_mentsu[j].len() {
-                    let m = &opponent_hands_mentsu[j][comp_idx];
+                } else if comp_idx < opp_mentsu.len() {
+                    let m = &opp_mentsu[comp_idx];
                     if m.is_shuntsu {
                         let remove_idx = rng.random_range(0..3);
                         let p = m.tiles[0] as usize;
                         match remove_idx {
-                            0 => { // Ryanmen/Penchan
+                            0 => {
+                                // Ryanmen/Penchan
                                 machi[p] = true;
-                                if (p % 9) < 6 { machi[p+3] = true; }
-                            },
-                            1 => { // Kanchan
-                                machi[p+1] = true;
-                            },
-                            2 => { // Ryanmen/Penchan
-                                machi[p+2] = true;
-                                if (p % 9) > 0 { machi[p-1] = true; }
-                            },
+                                if (p % 9) < 6 {
+                                    machi[p + 3] = true;
+                                }
+                            }
+                            1 => {
+                                // Kanchan
+                                machi[p + 1] = true;
+                            }
+                            2 => {
+                                // Ryanmen/Penchan
+                                machi[p + 2] = true;
+                                if !p.is_multiple_of(9) {
+                                    machi[p - 1] = true;
+                                }
+                            }
                             _ => {}
                         }
                     } else {

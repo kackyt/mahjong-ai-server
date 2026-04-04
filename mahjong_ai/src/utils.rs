@@ -1,4 +1,4 @@
-use mahjong_core::mahjong_generated::open_mahjong::{GameStateT};
+use mahjong_core::mahjong_generated::open_mahjong::GameStateT;
 
 pub fn paidistance(tehai_counts: &[u8; 34], target: usize) -> i32 {
     let target = target as i32;
@@ -42,7 +42,7 @@ static KIND_COEF: [f64; 5] = [0.997, 0.998, 0.999, 0.996, 0.995];
 
 pub fn get_dist_coef(dist: i32) -> f64 {
     let idx = dist + 1;
-    if idx >= 0 && idx < 10 {
+    if (0..10).contains(&idx) {
         DIST_COEF[idx as usize]
     } else {
         1.0

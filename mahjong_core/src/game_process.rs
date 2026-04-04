@@ -93,7 +93,7 @@ impl GameStateT {
             .filter(|(_, x)| !x.is_registered())
             .map(|(i, _)| i)
             .collect_vec();
-        ensure!(unregistered_index.len() != 0, "player is full");
+        ensure!(!unregistered_index.is_empty(), "player is full");
 
         // unregistered_indexからランダムに選ぶ
         let mut rng = rand::thread_rng();
@@ -195,28 +195,22 @@ impl GameStateT {
 
         for idx in 0..self.player_len {
             let player = &mut self.players[idx as usize];
-            let cursol: &mut u32;
-
             player.cursol = 14 + (idx * if idx < 2 { 31 } else { 30 });
             player.kawahai_len = 0;
             player.is_ippatsu = false;
             player.is_riichi = false;
-            player.mentsu_len = 0;
-
-            if self.is_non_duplicate {
-                cursol = &mut self.taku_cursol;
+            let cursol: &mut u32 = if self.is_non_duplicate {
+                &mut self.taku_cursol
             } else {
-                cursol = &mut player.cursol;
-            }
+                &mut player.cursol
+            };
             let r = self
                 .taku
                 .get_range((*cursol as usize)..(*cursol + 13) as usize);
 
             if let Ok(mut v) = r {
                 v.sort_unstable();
-                for (i, item) in v.into_iter().enumerate() {
-                    player.tehai[i] = item;
-                }
+                player.tehai.clone_from_slice(&v);
                 player.tehai_len = 13;
             }
 
@@ -224,7 +218,7 @@ impl GameStateT {
                 self.kyoku_id,
                 idx as i32,
                 &player.tehai[..player.tehai_len as usize]
-                    .into_iter()
+                    .iter()
                     .map(|x| Some(x.get_pai_id()))
                     .collect::<Vec<Option<u32>>>(),
             );
@@ -282,9 +276,6 @@ impl GameStateT {
         // ツモ切りの判定: indexがtehai_lenと等しい
         let is_tsumogiri = index == tehai_len;
 
-        // 手出しの判定: indexがtehai_len未満の場合
-        let _is_tedashi = index < tehai_len;
-
         // インデックスの正当性チェック
         ensure!(index <= tehai_len, "Invalid discard index");
 
@@ -298,40 +289,25 @@ impl GameStateT {
             player.tsumohai.clone()
         } else {
             // 手出し
-            let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
+            let mut tehai: Vec<PaiT> = player.tehai.to_vec();
             let p = tehai.remove(index);
 
             // ツモ番の場合のみ、ツモ牌を手牌に加えてソートする
             if player.is_tsumo {
                 tehai.push(player.tsumohai.clone());
                 tehai.sort_unstable();
-            } else {
-                // 副露後の場合、手牌が減るので詰めを行う（removeで既に詰められているが、末尾の不要なデータをクリアする必要があるかもだが、tehai_lenで管理しているので配列の詰め直しだけで良い）
-                // ただし、player.tehaiは固定長配列(的な扱い)なので、tehai_lenを減らす処理は後で行われる。
-                // ここでは一時的なVec操作。後でplayer.tehaiに書き戻す。
             }
             p
         };
 
         ensure!(
-            !(player.is_riichi && !is_tsumogiri),
+            !player.is_riichi || is_tsumogiri,
             GameProcessError::IllegalSutehaiAfterRiichi
         );
 
         if is_riichi {
             ensure!(!player.is_riichi, "すでにリーチしています");
             ensure!(player.mentsu_len == 0, "面前ではありません");
-            // シャンテン数チェック
-            // 手出し後の状態で判定するため、手牌から牌を切った後の状態（tsumohaiを含まない13枚or less）でチェックする必要があるか？
-            // リーチ宣言時は必ずツモ番である（is_tsumo == true）。
-            // なので、手出しした場合は tsumohai が tehai に入った状態で判定される。
-
-            // sutehai関数の元のロジックでは:
-            // let p = tehai.remove(index);
-            // tehai.push(player.tsumohai.clone());
-            // tehai.sort_unstable();
-            // p
-            // となっていたので、捨てた後の手牌（ツモ牌込み）でチェックしていた。
 
             let mut tehai_check: Vec<PaiT> = player.tehai.iter().take(tehai_len).cloned().collect();
             if !is_tsumogiri {
@@ -361,23 +337,9 @@ impl GameStateT {
                 tehai.push(player.tsumohai.clone());
                 tehai.sort_unstable();
             }
-            // 副露後の場合は単純に減るだけ
 
             // 書き戻し
-            for (i, item) in tehai.into_iter().enumerate() {
-                player.tehai[i] = item;
-            }
-            // 副露後などの場合、tehai_lenを更新する必要があるか？
-            // 元のロジックでは index != 13 の場合だけ書き戻しをしていた。
-            // 副露後の手出しの場合、tehai_len は本来減るはずだが、operate_fulo などの時点で既に減らされている？
-            // operate_fulo では tehai_len を減らしている。
-            // ここでの sutehai は「捨て牌」アクション。
-            // 14枚の手牌（13+1）から1枚捨てて13枚になる（通常）。
-            // 副露後: 10枚の手牌から1枚捨てて9枚になるのか？
-            // いや、operate_fuloで「晒した牌」は減る。残りの手牌から「打牌」をする。
-            // 例：ポン（2枚晒す）。手牌13枚 -> 11枚になる（ここでtehai_len=11）。
-            // その後、打牌をする。11枚の中から1枚捨てる。 -> 10枚になる。
-            // なので、is_tsumo == false の時は tehai_len を 1 減らす必要がある。
+            player.tehai.clone_from_slice(&tehai);
             if !player.is_tsumo {
                 player.tehai_len -= 1;
             }
@@ -409,7 +371,7 @@ impl GameStateT {
     /// ツモ和了の処理を行います。点数計算、スコア移動を適用し、結果を返します。
     pub fn tsumo_agari(&mut self, play_log: &mut PlayLog) -> anyhow::Result<Agari> {
         let player = &self.players[self.teban as usize];
-        let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
+        let mut tehai: Vec<PaiT> = player.tehai.to_vec();
         let machipai = player.tsumohai.clone();
 
         tehai.push(machipai.clone());
@@ -422,12 +384,12 @@ impl GameStateT {
             .collect();
 
         let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
-        if fulo.len() == 0 {
+        if fulo.is_empty() {
             all_mentsu.extend(all_of_chiitoitsu(&state));
         }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &player.tsumohai.pack());
 
-        ensure!(all_mentsu_w_machi.len() > 0, "和了ではありません");
+        ensure!(!all_mentsu_w_machi.is_empty(), "和了ではありません");
 
         let mut best_agari =
             self.get_best_agari(self.teban as usize, &all_mentsu_w_machi, &fulo, 0, false)?;
@@ -472,8 +434,8 @@ impl GameStateT {
             }
         }
 
-        for i in 0..self.player_len as usize {
-            self.players[i].score += scores[i];
+        for (i, &score) in scores.iter().enumerate().take(self.player_len as usize) {
+            self.players[i].score += score;
         }
         self.riichibou = 0;
         self.tsumobou = 0;
@@ -520,7 +482,7 @@ impl GameStateT {
         pai: &PaiT,
     ) -> anyhow::Result<Agari> {
         let player = &self.players[winner_idx];
-        let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
+        let mut tehai: Vec<PaiT> = player.tehai.to_vec();
         let machipai = pai.clone();
 
         tehai.push(machipai.clone());
@@ -533,12 +495,12 @@ impl GameStateT {
             .collect();
 
         let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
-        if fulo.len() == 0 {
+        if fulo.is_empty() {
             all_mentsu.extend(all_of_chiitoitsu(&state));
         }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &pai.pack());
 
-        ensure!(all_mentsu_w_machi.len() > 0, "和了ではありません");
+        ensure!(!all_mentsu_w_machi.is_empty(), "和了ではありません");
 
         let mut best_agari =
             self.get_best_agari(winner_idx, &all_mentsu_w_machi, &fulo, 0, true)?;
@@ -567,8 +529,8 @@ impl GameStateT {
             }
         }
 
-        for i in 0..self.player_len as usize {
-            self.players[i].score += scores[i];
+        for (i, &score) in scores.iter().enumerate().take(self.player_len as usize) {
+            self.players[i].score += score;
         }
         self.riichibou = 0;
         self.tsumobou = 0;
@@ -609,7 +571,7 @@ impl GameStateT {
     /// ロンが可能かどうかを判定します。フリテンチェックや役の確認を行います。
     pub fn check_ron(&self, winner_idx: usize, pai: &PaiT) -> Option<Agari> {
         let player = &self.players[winner_idx];
-        let mut tehai: Vec<PaiT> = player.tehai.iter().cloned().collect();
+        let mut tehai: Vec<PaiT> = player.tehai.to_vec();
         tehai.push(pai.clone());
 
         // Genbutsu Furiten Check
@@ -627,7 +589,7 @@ impl GameStateT {
             .collect();
 
         let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
-        if fulo.len() == 0 {
+        if fulo.is_empty() {
             all_mentsu.extend(all_of_chiitoitsu(&state));
         }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &pai.pack());
@@ -822,12 +784,12 @@ impl GameStateT {
 
         let mut found = false;
         for i in 0..player.mentsu_len as usize {
-            if player.mentsu[i].mentsu_type == MentsuType::TYPE_KOUTSU {
-                if player.mentsu[i].pai_list[0].pai_num == mentsu.pai_list[0].pai_num {
-                    player.mentsu[i] = mentsu.clone();
-                    found = true;
-                    break;
-                }
+            if player.mentsu[i].mentsu_type == MentsuType::TYPE_KOUTSU
+                && player.mentsu[i].pai_list[0].pai_num == mentsu.pai_list[0].pai_num
+            {
+                player.mentsu[i] = mentsu.clone();
+                found = true;
+                break;
             }
         }
 
@@ -908,7 +870,7 @@ impl GameStateT {
             }
         }
 
-        if num >= 1 && num <= 7 {
+        if (1..=7).contains(&num) {
             if let (Some(i1), Some(i2)) = (find(n - 1), find(n + 1)) {
                 let p1 = MentsuPaiT {
                     pai_num: player.tehai[i1].pai_num,
@@ -1022,7 +984,7 @@ impl GameStateT {
             let p3 = MentsuPaiT {
                 pai_num: pai.pai_num,
                 id: pai.id,
-                flag: flag,
+                flag,
             };
             let p4 = MentsuPaiT {
                 pai_num: 0,
@@ -1093,7 +1055,7 @@ impl GameStateT {
             let p4 = MentsuPaiT {
                 pai_num: pai.pai_num,
                 id: pai.id,
-                flag: flag,
+                flag,
             };
             res.push(MentsuT {
                 pai_list: [p1, p2, p3, p4],
@@ -1173,10 +1135,9 @@ impl GameStateT {
 
         let check_tile = |pai: &PaiT| {
             for m in player.mentsu[0..player.mentsu_len as usize].iter() {
-                if m.mentsu_type == MentsuType::TYPE_KOUTSU {
-                    if m.pai_list[0].pai_num == pai.pai_num {
-                        return Some((m.clone(), pai.clone()));
-                    }
+                if m.mentsu_type == MentsuType::TYPE_KOUTSU && m.pai_list[0].pai_num == pai.pai_num
+                {
+                    return Some((m.clone(), pai.clone()));
                 }
             }
             None
@@ -1190,9 +1151,7 @@ impl GameStateT {
                     MentsuPaiT::default(),
                     MentsuPaiT::default(),
                 ];
-                for i in 0..3 {
-                    list[i] = m.pai_list[i].clone();
-                }
+                list[..3].clone_from_slice(&m.pai_list[..3]);
                 list[3] = MentsuPaiT {
                     pai_num: tile.pai_num,
                     id: tile.id,
@@ -1214,9 +1173,7 @@ impl GameStateT {
                 MentsuPaiT::default(),
                 MentsuPaiT::default(),
             ];
-            for i in 0..3 {
-                list[i] = m.pai_list[i].clone();
-            }
+            list[..3].clone_from_slice(&m.pai_list[..3]);
             list[3] = MentsuPaiT {
                 pai_num: tile.pai_num,
                 id: tile.id,
@@ -1271,6 +1228,7 @@ impl GameStateT {
     }
 
     /// クライアントからのアクションリクエストを処理し、適切なメソッドを呼び出します。
+    #[allow(clippy::too_many_arguments)]
     pub fn action(
         &mut self,
         play_log: &mut PlayLog,
@@ -1381,17 +1339,17 @@ impl GameStateT {
         }
     }
 
-    pub fn copy_dora(&mut self, dora: &Vec<PaiT>) {
+    pub fn copy_dora(&mut self, dora: &[PaiT]) {
         self.dora_len = dora.len() as u32;
         for (i, item) in dora.iter().enumerate() {
-            self.taku.n1[(DORA_START_INDEX + i) as usize] = item.clone();
+            self.taku.n1[DORA_START_INDEX + i] = item.clone();
         }
     }
 
-    pub fn copy_uradora(&mut self, uradora: &Vec<PaiT>) {
+    pub fn copy_uradora(&mut self, uradora: &[PaiT]) {
         self.uradora_len = uradora.len() as u32;
         for (i, item) in uradora.iter().enumerate() {
-            self.taku.n1[(URADORA_START_INDEX + i) as usize] = item.clone();
+            self.taku.n1[URADORA_START_INDEX + i] = item.clone();
         }
     }
 

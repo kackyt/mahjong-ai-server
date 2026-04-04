@@ -21,7 +21,7 @@ pub fn view<'a>(
     can_kan_flag: bool,
 ) -> Element<'a, Message> {
     unsafe {
-        let core_state = &G_STATE;
+        let core_state = &*std::ptr::addr_of!(G_STATE);
 
         let isnt_riichi = !core_state.players[0].is_riichi;
         let shanten = {
@@ -41,8 +41,8 @@ pub fn view<'a>(
         };
 
         let dora_elem = dora::view(
-            &core_state.get_dora(),
-            &core_state.get_uradora(),
+            core_state.get_dora(),
+            core_state.get_uradora(),
             state == AppState::HandEnded || state == AppState::GameFinished,
         );
 
@@ -98,7 +98,13 @@ pub fn view<'a>(
                                 &player.tsumohai,
                                 player.is_tsumo,
                                 false,
-                                false,
+                                true,
+                                match *i {
+                                    1 => 270,
+                                    2 => 180,
+                                    3 => 90,
+                                    _ => 0,
+                                },
                             )
                         ]
                         .spacing(10)
@@ -117,6 +123,7 @@ pub fn view<'a>(
                 p0.is_tsumo,
                 state == AppState::Started,
                 false,
+                0,
             );
             // Fulou (Melds)
             let p0_fulo = fulo::view(&p0.mentsu[0..p0.mentsu_len as usize]);
@@ -224,6 +231,7 @@ pub fn view<'a>(
                 core_state.players[0].is_tsumo,
                 state == AppState::Started,
                 false,
+                0,
             );
 
             column![

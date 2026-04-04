@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod tests {
     use ai_bridge::{
-        bindings::{MJITehai, MJITehai0, MJMI_GETMACHI, MJMI_GETTEHAI, MJMI_GETVISIBLEHAIS},
+        bindings::{MJITehai, MJMI_GETMACHI, MJMI_GETTEHAI, MJMI_GETVISIBLEHAIS},
         interface::{mjsend_message, G_STATE},
     };
     use mahjong_core::{mahjong_generated::open_mahjong::GameStateT, play_log, shanten::PaiState};
     use std::{
         path::PathBuf,
-        ptr::{null, null_mut},
+        ptr::null_mut,
     };
 
     #[test]
@@ -22,16 +22,16 @@ mod tests {
         array[..pais_vec.len()].copy_from_slice(&pais_vec);
 
         unsafe {
-            let state = &mut G_STATE;
+            let state = &mut *std::ptr::addr_of_mut!(G_STATE);
             state.create(b"test", 1, &mut play_log);
             state.load(&array);
             state.start(&mut play_log);
-            state.tsumo(&mut play_log);
+            let _ = state.tsumo(&mut play_log);
         }
 
         {
             unsafe {
-                let state = &G_STATE;
+                let state = &*std::ptr::addr_of!(G_STATE);
                 let player = &state.players[state.teban as usize];
                 for p in &player.tehai {
                     print!("{}", p);
@@ -49,16 +49,16 @@ mod tests {
                     null_mut(),
                     MJMI_GETTEHAI.try_into().unwrap(),
                     0,
-                    std::mem::transmute(&mut tehai),
+                    std::mem::transmute::<&mut MJITehai, usize>(&mut tehai),
                 );
                 assert_eq!(tehai.tehai_max, 13);
             }
 
             unsafe {
-                let state = &mut G_STATE;
+                let state = &mut *std::ptr::addr_of_mut!(G_STATE);
 
-                state.sutehai(&mut play_log, 8, false);
-                state.tsumo(&mut play_log);
+                let _ = state.sutehai(&mut play_log, 8, false);
+                let _ = state.tsumo(&mut play_log);
 
                 let player = &state.players[state.teban as usize];
                 for p in &player.tehai {
@@ -79,7 +79,7 @@ mod tests {
                     std::ptr::null_mut(),
                     MJMI_GETMACHI.try_into().unwrap(),
                     0,
-                    std::mem::transmute(&mut machi),
+                    std::mem::transmute::<&mut [u32; 34], usize>(&mut machi),
                 );
 
                 assert_eq!(
@@ -110,10 +110,10 @@ mod tests {
                 )
             }
             unsafe {
-                let state = &mut G_STATE;
+                let state = &mut *std::ptr::addr_of_mut!(G_STATE);
 
-                state.sutehai(&mut play_log, 12, false);
-                state.tsumo(&mut play_log);
+                let _ = state.sutehai(&mut play_log, 12, false);
+                let _ = state.tsumo(&mut play_log);
 
                 let player = &state.players[state.teban as usize];
                 for p in &player.tehai {
@@ -149,14 +149,14 @@ mod tests {
             state.create(b"test", 1, &mut play_log);
             state.load(&array);
             state.start(&mut play_log);
-            state.tsumo(&mut play_log);
+            let _ = state.tsumo(&mut play_log);
             let mut machi = [1u32; 34];
 
             mjsend_message(
                 std::ptr::null_mut(),
                 MJMI_GETMACHI.try_into().unwrap(),
                 0,
-                std::mem::transmute(&mut machi),
+                std::mem::transmute::<&mut [u32; 34], usize>(&mut machi),
             );
 
             assert_eq!(
@@ -169,7 +169,7 @@ mod tests {
 
             let result = state.tsumo_agari(&mut play_log);
 
-            assert_eq!(result.is_err(), true);
+            assert!(result.is_err());
         }
     }
 }

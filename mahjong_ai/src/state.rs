@@ -1,5 +1,5 @@
 use crate::strategy::mj0::mj0_simulate;
-use mahjong_core::mahjong_generated::open_mahjong::{GameStateT};
+use mahjong_core::mahjong_generated::open_mahjong::GameStateT;
 
 pub struct AIStateWrapper<'a> {
     pub game_state: &'a GameStateT,
@@ -29,8 +29,8 @@ impl<'a> AIStateWrapper<'a> {
         }
 
         if myself.tsumohai.pai_num < 34 {
-             visible_counts[myself.tsumohai.pai_num as usize] += 1;
-             my_tehai_counts[myself.tsumohai.pai_num as usize] += 1;
+            visible_counts[myself.tsumohai.pai_num as usize] += 1;
+            my_tehai_counts[myself.tsumohai.pai_num as usize] += 1;
         }
 
         // 2. Count discards (kawahai)

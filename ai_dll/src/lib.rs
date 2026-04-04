@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
 
 use ai_bridge::bindings::{
-    MJITehai, MJMI_GETDORA, MJMI_GETKAWA, MJMI_GETTEHAI, MJPI_CREATEINSTANCE, MJPI_INITIALIZE,
-    MJPI_SUTEHAI, MJPI_YOURNAME,
+    MJITehai, MJMI_GETDORA, MJMI_GETKAWA, MJMI_GETTEHAI, MJPI_CREATEINSTANCE, MJPI_DESTROY,
+    MJPI_INITIALIZE, MJPI_SUTEHAI, MJPI_YOURNAME,
 };
 use mahjong_core::mahjong_generated::open_mahjong::{
     GameStateT, MentsuFlag, MentsuPaiT, MentsuT, MentsuType, PaiT,
@@ -27,16 +27,19 @@ static mut MESSAGE_FUNC: Option<MJSendMessage> = None;
 // Global state to avoid Box and avoid extending MahjongAIState beyond host's fixed buffer size (legacy compatibility).
 static mut G_STATE: Option<GameStateT> = None;
 
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers and accesses global mutable state.
 unsafe fn sync_game_state(
     inst: *mut MahjongAIState,
     callback: MJSendMessage,
 ) -> anyhow::Result<()> {
     let state_ref = &mut *inst;
 
-    if G_STATE.is_none() {
-        G_STATE = Some(GameStateT::default());
+    if (unsafe { &*std::ptr::addr_of!(G_STATE) }).is_none() {
+        unsafe { *std::ptr::addr_of_mut!(G_STATE) = Some(GameStateT::default()) };
     }
-    let game_state = G_STATE.as_mut().unwrap();
+    let game_state = unsafe { (*std::ptr::addr_of_mut!(G_STATE)).as_mut().unwrap() };
 
     // Set basic info
     game_state.bakaze = state_ref.kyoku / 4;
@@ -57,8 +60,8 @@ unsafe fn sync_game_state(
     let me_idx = game_state.teban as usize;
 
     // Tehai
-    for i in 0..tehai_struct.tehai_max as usize {
-        let pai = tehai_struct.tehai[i] as u8;
+    for (i, &tehai_val) in tehai_struct.tehai.iter().enumerate().take(tehai_struct.tehai_max as usize) {
+        let pai = tehai_val as u8;
         if i < 13 {
             game_state.players[me_idx].tehai[i] = PaiT {
                 pai_num: pai,
@@ -217,15 +220,15 @@ unsafe fn sync_game_state(
         let count = callback(
             inst as *const c_void,
             MJMI_GETKAWA,
-            i as usize,
+            i,
             kawahai_buf.as_mut_ptr() as usize,
         ) as u32;
 
         let player = &mut game_state.players[i];
-        for k in 0..count as usize {
+        for (k, &kawahai_val) in kawahai_buf.iter().enumerate().take(count as usize) {
             if k < 20 {
                 player.kawahai[k] = PaiT {
-                    pai_num: kawahai_buf[k] as u8,
+                    pai_num: kawahai_val as u8,
                     id: 0,
                     is_tsumogiri: false,
                     is_riichi: false,
@@ -245,10 +248,10 @@ unsafe fn sync_game_state(
         0,
     ) as u32;
 
-    for i in 0..dora_count as usize {
+    for (i, &dora_val) in dora_buf.iter().enumerate().take(dora_count as usize) {
         if i < 8 {
             game_state.taku.n5[i] = PaiT {
-                pai_num: dora_buf[i] as u8,
+                pai_num: dora_val as u8,
                 id: 0,
                 is_tsumogiri: false,
                 is_riichi: false,
@@ -256,13 +259,17 @@ unsafe fn sync_game_state(
             };
         }
     }
-    game_state.dora_len = dora_count as u32;
+    game_state.dora_len = dora_count;
 
     Ok(())
 }
 
+/// # Safety
+///
+/// This function is the main entry point for the AI DLL and is called by the host.
+/// It is unsafe because it dereferences raw pointers provided by the host.
 #[no_mangle]
-pub extern "system" fn MJPInterfaceFunc(
+pub unsafe extern "system" fn MJPInterfaceFunc(
     inst: *mut MahjongAIState,
     message: u32,
     param1: usize,
@@ -294,47 +301,44 @@ pub extern "system" fn MJPInterfaceFunc(
                     state.tsumohai = -1; // No tile drawn yet
                 }
 
-                if G_STATE.is_none() {
-                    G_STATE = Some(GameStateT::default());
-                }
-                MESSAGE_FUNC = Some(std::mem::transmute(param2));
+                    if (&*std::ptr::addr_of!(G_STATE)).is_none() {
+                        *std::ptr::addr_of_mut!(G_STATE) = Some(GameStateT::default());
+                    }
+                MESSAGE_FUNC = Some(std::mem::transmute::<usize, MJSendMessage>(param2));
             }
             0
         }
         MJPI_SUTEHAI => {
             unsafe {
                 if let Some(func) = MESSAGE_FUNC {
-                    match sync_game_state(inst, func) {
-                        Ok(_) => {
-                            if let Some(state) = &G_STATE {
-                                match eval_sutehai(state) {
-                                    Ok((pai, _score)) => {
-                                        let player = &state.players[state.teban as usize];
-                                        // Try to find the tile in hand (tsumohai or tehai)
-                                        // Prioritize Tsumogiri (index 13) if tsumohai matches
-                                        if player.is_tsumo
-                                            && player.tsumohai.pai_num as usize == pai
-                                        {
-                                            return consts::MJPIR_SUTEHAI | 13;
-                                        }
-
-                                        // Find in tehai
-                                        for i in 0..player.tehai_len as usize {
-                                            if player.tehai[i].pai_num as usize == pai {
-                                                return consts::MJPIR_SUTEHAI | (i as u32);
-                                            }
-                                        }
-
-                                        // Fallback: If not found (shouldn't happen), try tsumohai index 13 just in case
+                    if sync_game_state(inst, func).is_ok() {
+                        if let Some(state) = &*std::ptr::addr_of!(G_STATE) {
+                            match eval_sutehai(state) {
+                                Ok((pai, _score)) => {
+                                    let player = &state.players[state.teban as usize];
+                                    // Try to find the tile in hand (tsumohai or tehai)
+                                    // Prioritize Tsumogiri (index 13) if tsumohai matches
+                                    if player.is_tsumo
+                                        && player.tsumohai.pai_num as usize == pai
+                                    {
                                         return consts::MJPIR_SUTEHAI | 13;
                                     }
-                                    Err(_) => {
-                                        // Fallback
+
+                                    // Find in tehai
+                                    for i in 0..player.tehai_len as usize {
+                                        if player.tehai[i].pai_num as usize == pai {
+                                            return consts::MJPIR_SUTEHAI | (i as u32);
+                                        }
                                     }
+
+                                    // Fallback: If not found (shouldn't happen), try tsumohai index 13 just in case
+                                    return consts::MJPIR_SUTEHAI | 13;
+                                }
+                                Err(_) => {
+                                    // Fallback
                                 }
                             }
                         }
-                        Err(_) => {}
                     }
                 }
             }
@@ -342,9 +346,7 @@ pub extern "system" fn MJPInterfaceFunc(
         }
         MJPI_YOURNAME => name_ptr as u32,
         MJPI_DESTROY => {
-            unsafe {
-                G_STATE = None;
-            }
+            *std::ptr::addr_of_mut!(G_STATE) = None;
             0
         }
         _ => 0,

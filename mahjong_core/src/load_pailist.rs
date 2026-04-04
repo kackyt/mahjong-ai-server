@@ -1,6 +1,6 @@
 use std::{fs::File, path::Path};
 
-use anyhow::{ensure, Context};
+use anyhow::Context;
 use arrow_array::{
     array::Int32Array, Array, FixedSizeListArray, ListArray, RecordBatch, StringArray, StructArray,
     UInt32Array,

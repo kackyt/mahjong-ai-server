@@ -1,0 +1,9 @@
+- [x] Requirements Gathering <!-- id: 0 -->
+    - [x] Analyze `game_process.rs` logic <!-- id: 1 -->
+- [x] Implementation <!-- id: 2 -->
+    - [x] Update `sutehai` to check `is_tsumo` flag <!-- id: 3 -->
+    - [x] Prevent tsumogiri when `is_tsumo` is false <!-- id: 4 -->
+    - [x] Skip tsumohai merging when `is_tsumo` is false <!-- id: 5 -->
+- [x] Verification <!-- id: 6 -->
+    - [x] Verify fix with existing tests or manual confirmation <!-- id: 7 -->
+    - [ ] Verify fix by running `cargo test --test game_process_test` <!-- id: 9 -->

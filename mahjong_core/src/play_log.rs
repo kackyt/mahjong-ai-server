@@ -25,27 +25,25 @@ fn num_to_hai(num_list: &[Option<u32>], has_aka: u32) -> String {
     let mut ret = String::new();
     let mut suit = 255;
 
-    for opn in num_list {
-        if let Some(pn) = opn {
-            let s = *pn / 36;
+    for pn in num_list.iter().flatten() {
+        let s = *pn / 36;
 
-            if s != suit {
-                suit = s;
-                ret.push(colors[s as usize]);
-            }
-
-            let mut num = *pn % 36 / 4 + 1;
-            let id = *pn % 4;
-
-            if s < 3 {
-                let aka_num = has_aka >> (s * 2) & 0b11;
-                if num == 5 && (id as u32) < aka_num {
-                    num = 0;
-                }
-            }
-
-            ret.push_str(&format!("{}", num));
+        if s != suit {
+            suit = s;
+            ret.push(colors[s as usize]);
         }
+
+        let mut num = *pn % 36 / 4 + 1;
+        let id = *pn % 4;
+
+        if s < 3 {
+            let aka_num = has_aka >> (s * 2) & 0b11;
+            if num == 5 && id < aka_num {
+                num = 0;
+            }
+        }
+
+        ret.push_str(&format!("{}", num));
     }
 
     ret
@@ -177,9 +175,9 @@ impl Iterator for PaiyamaBatch {
                     self.batch_reader = Some(reader);
                     self.id_list = Some(id_list);
                     self.pai_ids_list = Some(pai_ids_list);
-                    return Some(Ok((id, pai_ids.to_vec())));
+                    Some(Ok((id, pai_ids.to_vec())))
                 } else {
-                    return None;
+                    None
                 }
             }
             (Some(ref mut batch_reader), Some(ref id_list), Some(ref pai_ids_list), index) => {
@@ -192,7 +190,7 @@ impl Iterator for PaiyamaBatch {
                         .unwrap()
                         .values();
                     self.index += 1;
-                    return Some(Ok((id, pai_ids.to_vec())));
+                    Some(Ok((id, pai_ids.to_vec())))
                 } else {
                     let result = next_batch(batch_reader);
                     if let Ok((Some(id_list), Some(pai_ids_list))) = result {
@@ -206,7 +204,7 @@ impl Iterator for PaiyamaBatch {
                         self.id_list = Some(id_list);
                         self.pai_ids_list = Some(pai_ids_list);
                         self.index = 1;
-                        return Some(Ok((id, pai_ids.to_vec())));
+                        Some(Ok((id, pai_ids.to_vec())))
                     } else {
                         let result = next_entry(&mut self.entries);
                         if let Ok((Some(reader), Some(id_list), Some(pai_ids_list))) = result {
@@ -221,9 +219,9 @@ impl Iterator for PaiyamaBatch {
                             self.batch_reader = Some(reader);
                             self.id_list = Some(id_list);
                             self.pai_ids_list = Some(pai_ids_list);
-                            return Some(Ok((id, pai_ids.to_vec())));
+                            Some(Ok((id, pai_ids.to_vec())))
                         } else {
-                            return None;
+                            None
                         }
                     }
                 }
@@ -410,6 +408,7 @@ impl GamePlayerLog {
 }
 
 impl RuleLog {
+    #[allow(clippy::too_many_arguments)]
     pub fn append(
         &mut self,
         game_id: String,
@@ -561,6 +560,7 @@ impl RuleLog {
 }
 
 impl KyokuLog {
+    #[allow(clippy::too_many_arguments)]
     pub fn append(
         &mut self,
         id: u64,
@@ -623,6 +623,12 @@ impl KyokuLog {
     }
 }
 
+impl Default for AgarisLog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AgarisLog {
     pub fn new() -> Self {
         // yakuはname(役の名前)とhan(翻数)の2つのフィールドを持つ構造体のリストが一つのレコードとして保存される
@@ -645,7 +651,7 @@ impl AgarisLog {
             han_vec: Vec::new(),
             tehai_vec: Vec::new(),
             pai_ids_vec: Vec::new(),
-            yaku_vec_builder: yaku_vec_builder,
+            yaku_vec_builder,
             dora_vec: Vec::new(),
             uradora_vec: Vec::new(),
             dora_orig_vec: Vec::new(),
@@ -658,6 +664,7 @@ impl AgarisLog {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn append(
         &mut self,
         kyoku_id: u64,
@@ -918,6 +925,12 @@ impl NagareLog {
     }
 }
 
+impl Default for PlayLog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PlayLog {
     pub fn new() -> Self {
         Self {
@@ -940,6 +953,7 @@ impl PlayLog {
         self.game_player_log.append(name, game_id, player_index);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn append_rule_log(
         &mut self,
         game_id: String,
@@ -995,6 +1009,7 @@ impl PlayLog {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn append_kyoku_log(
         &mut self,
         id: u64,
@@ -1018,6 +1033,7 @@ impl PlayLog {
         self.haipais_log.append(kyoku_id, player_index, pai_ids);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn append_agaris_log(
         &mut self,
         kyoku_id: u64,

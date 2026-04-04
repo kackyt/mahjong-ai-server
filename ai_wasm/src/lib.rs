@@ -28,7 +28,11 @@ pub fn get_discard(json_state: String) -> String {
 }
 
 fn calculate_discard(tehai: &[u8]) -> Option<usize> {
-    let mut min_shanten = 999;
+    if tehai.is_empty() || tehai.iter().any(|&p| p >= 34) {
+        return None;
+    }
+
+    let mut min_shanten = i32::MAX;
     let mut best_discard = None;
 
     // Iterate over each tile in tehai to try discarding it
@@ -47,8 +51,10 @@ fn calculate_discard(tehai: &[u8]) -> Option<usize> {
         // Create PaiT vector for PaiState
         let mut pai_list: Vec<PaiT> = Vec::with_capacity(temp_tehai_nums.len());
         for &pai_num in &temp_tehai_nums {
-            let mut pai = PaiT::default();
-            pai.pai_num = pai_num;
+            let pai = PaiT {
+                pai_num,
+                ..Default::default()
+            };
             pai_list.push(pai);
         }
 
@@ -70,8 +76,10 @@ fn calculate_discard(tehai: &[u8]) -> Option<usize> {
 pub fn get_shanten(tehai: &[u8]) -> i32 {
     let mut pai_list: Vec<PaiT> = Vec::with_capacity(tehai.len());
     for &pai_num in tehai {
-        let mut pai = PaiT::default();
-        pai.pai_num = pai_num;
+        let pai = PaiT {
+            pai_num,
+            ..Default::default()
+        };
         pai_list.push(pai);
     }
     let mut state = PaiState::from(&pai_list);

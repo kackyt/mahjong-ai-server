@@ -8,15 +8,15 @@ use ai_bridge::{
     ai_loader::{get_ai_symbol, load_ai},
     bindings::{
         MJEK_RYUKYOKU, MJPIR_REACH, MJPIR_SUTEHAI, MJPIR_TSUMO, MJPI_BASHOGIME,
-        MJPI_CREATEINSTANCE, MJPI_ENDGAME, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_ONEXCHANGE,
-        MJPI_STARTGAME, MJPI_STARTKYOKU, MJPI_SUTEHAI, MJST_INKYOKU,
+        MJPI_CREATEINSTANCE, MJPI_ENDKYOKU, MJPI_INITIALIZE,
+        MJPI_STARTGAME, MJPI_STARTKYOKU, MJPI_SUTEHAI,
     },
     interface::{mjsend_message, G_STATE},
 };
 
 extern crate libc;
 
-type MJPInterfaceFuncP = extern "stdcall" fn(*mut c_void, usize, usize, usize) -> usize;
+type MJPInterfaceFuncP = unsafe extern "system" fn(*mut c_void, usize, usize, usize) -> usize;
 
 #[derive(Parser, Debug)]
 #[command(author, about, version)]
@@ -31,10 +31,10 @@ struct Command {
 
 unsafe fn experiment(func: MJPInterfaceFuncP, inst: *mut c_void, play_log: &mut play_log::PlayLog) {
     {
-        let state = &mut G_STATE;
+        let state = unsafe { &mut *std::ptr::addr_of_mut!(G_STATE) };
         state.start(play_log);
     }
-    func(inst, MJPI_STARTKYOKU.try_into().unwrap(), 0, 0);
+    func(inst, MJPI_STARTKYOKU as usize, 0, 0);
     println!("start kyoku end");
 
     let mut is_agari = false;
@@ -42,24 +42,21 @@ unsafe fn experiment(func: MJPInterfaceFuncP, inst: *mut c_void, play_log: &mut 
     for _i in 0..18 {
         let tsumohai_num: usize;
         {
-            let state = &mut G_STATE;
+            let state = unsafe { &mut *std::ptr::addr_of_mut!(G_STATE) };
             let _ = state.tsumo(play_log);
             tsumohai_num = state.players[state.teban as usize]
                 .tsumohai
                 .pai_num
-                .try_into()
-                .unwrap();
+                .into();
         }
 
-        let ret: u32 = func(inst, MJPI_SUTEHAI.try_into().unwrap(), tsumohai_num, 0)
-            .try_into()
-            .unwrap();
+        let ret: u32 = func(inst, MJPI_SUTEHAI as usize, tsumohai_num, 0) as u32;
         let index = ret & 0x3F;
         let flag = ret & 0xFF80;
         println!("ret = {} flag = {:04x}", index, flag);
 
         {
-            let state = &mut G_STATE;
+            let state = unsafe { &mut *std::ptr::addr_of_mut!(G_STATE) };
             {
                 let player = &state.players[state.teban as usize];
                 for p in &player.tehai {
@@ -92,9 +89,9 @@ unsafe fn experiment(func: MJPInterfaceFuncP, inst: *mut c_void, play_log: &mut 
                 is_agari = true;
                 func(
                     inst,
-                    MJPI_ENDKYOKU.try_into().unwrap(),
-                    MJEK_RYUKYOKU.try_into().unwrap(),
-                    std::mem::transmute(score.as_ptr()),
+                    MJPI_ENDKYOKU as usize,
+                    MJEK_RYUKYOKU as usize,
+                    score.as_ptr() as usize,
                 );
                 break;
             }
@@ -106,11 +103,11 @@ unsafe fn experiment(func: MJPInterfaceFuncP, inst: *mut c_void, play_log: &mut 
         let score: [i32; 4] = [-3000, 0, 0, 0];
         func(
             inst,
-            MJPI_ENDKYOKU.try_into().unwrap(),
-            MJEK_RYUKYOKU.try_into().unwrap(),
-            std::mem::transmute(score.as_ptr()),
+            MJPI_ENDKYOKU as usize,
+            MJEK_RYUKYOKU as usize,
+            score.as_ptr() as usize,
         );
-        let state = &mut G_STATE;
+        let state = unsafe { &mut *std::ptr::addr_of_mut!(G_STATE) };
         state.nagare(play_log);
     }
 }
@@ -125,13 +122,13 @@ fn cmd(args: &Command) -> anyhow::Result<()> {
 
     unsafe {
         let func: MJPInterfaceFuncP =
-            std::mem::transmute(get_ai_symbol(handle, "MJPInterfaceFunc")?);
+            std::mem::transmute::<*const c_void, MJPInterfaceFuncP>(get_ai_symbol(handle, "MJPInterfaceFunc")?);
         println!("MJPInterfaceFunc :{:p}", func);
         println!("test create instance");
 
         let size = func(
             std::ptr::null_mut(),
-            MJPI_CREATEINSTANCE.try_into().unwrap(),
+            MJPI_CREATEINSTANCE as usize,
             0,
             0,
         );
@@ -148,24 +145,24 @@ fn cmd(args: &Command) -> anyhow::Result<()> {
 
             let init_success = func(
                 inst,
-                MJPI_INITIALIZE.try_into().unwrap(),
+                MJPI_INITIALIZE as usize,
                 0,
-                std::mem::transmute(sendmes_ptr),
+                sendmes_ptr as usize,
             );
 
             println!("init end {} {:p}", init_success, inst);
 
             {
-                let state = &mut G_STATE;
+                let state = &mut *std::ptr::addr_of_mut!(G_STATE);
                 state.create(b"test", 1, &mut play_log);
             }
 
-            func(inst, MJPI_STARTGAME.try_into().unwrap(), 0, 0);
+            func(inst, MJPI_STARTGAME as usize, 0, 0);
             println!("start game end");
             func(
                 inst,
-                MJPI_BASHOGIME.try_into().unwrap(),
-                std::mem::transmute(dummy.as_ptr()),
+                MJPI_BASHOGIME as usize,
+                dummy.as_ptr() as usize,
                 0,
             );
             println!("bashogime end");
@@ -177,7 +174,7 @@ fn cmd(args: &Command) -> anyhow::Result<()> {
                     let paiyama = paiyama_r?;
 
                     {
-                        let state = &mut G_STATE;
+                        let state = &mut *std::ptr::addr_of_mut!(G_STATE);
                         state.load(&paiyama.1);
                     }
                     experiment(func, inst, &mut play_log);
@@ -185,7 +182,7 @@ fn cmd(args: &Command) -> anyhow::Result<()> {
             } else {
                 // 1回きりの実行
                 {
-                    let state = &mut G_STATE;
+                    let state = &mut *std::ptr::addr_of_mut!(G_STATE);
                     state.shuffle();
                 }
 

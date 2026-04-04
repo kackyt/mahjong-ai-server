@@ -1,8 +1,6 @@
-use mahjong_ai::strategy::mj0::mj0_simulate;
 use mahjong_ai::evaluator::eval_sutehai;
-use mahjong_core::mahjong_generated::open_mahjong::{
-    GameStateT, PaiT, PlayerT, TakuT
-};
+use mahjong_ai::strategy::mj0::mj0_simulate;
+use mahjong_core::mahjong_generated::open_mahjong::{GameStateT, PaiT, PlayerT, TakuT};
 
 fn create_pai(pai_num: u8) -> PaiT {
     PaiT {
@@ -15,18 +13,18 @@ fn create_pai(pai_num: u8) -> PaiT {
 }
 
 fn setup_game_state() -> GameStateT {
-    let mut game_state = GameStateT::default();
-    // 4 Players
-    game_state.players = [
-        PlayerT::default(),
-        PlayerT::default(),
-        PlayerT::default(),
-        PlayerT::default(),
-    ];
-    game_state.teban = 0;
-    // Taku
-    game_state.taku = TakuT::default();
-    game_state.dora_len = 1;
+    let mut game_state = GameStateT {
+        players: [
+            PlayerT::default(),
+            PlayerT::default(),
+            PlayerT::default(),
+            PlayerT::default(),
+        ],
+        teban: 0,
+        taku: TakuT::default(),
+        dora_len: 1,
+        ..Default::default()
+    };
     game_state.taku.n5[0] = create_pai(0); // 1m dora indicator -> 2m dora
 
     game_state
@@ -57,7 +55,11 @@ fn test_mj0_wall_reading_basic() {
     // Visible = 4.
     // Nokorihai[0] should be 0.
 
-    assert!(nokorihai[0] < 0.001, "1m should be 0 remaining, got {}", nokorihai[0]);
+    assert!(
+        nokorihai[0] < 0.001,
+        "1m should be 0 remaining, got {}",
+        nokorihai[0]
+    );
 
     // 2m (1) count:
     // Visible = 0.
@@ -65,7 +67,11 @@ fn test_mj0_wall_reading_basic() {
     // MJ0 initializes wall with 4.
     // Since opponents might use 2m in their hands during simulation, it can be less than 4.
     // But it should be > 2.0 (unlikely everyone uses 2m).
-    assert!(nokorihai[1] > 2.0 && nokorihai[1] <= 4.0, "2m should be reasonable remaining, got {}", nokorihai[1]);
+    assert!(
+        nokorihai[1] > 2.0 && nokorihai[1] <= 4.0,
+        "2m should be reasonable remaining, got {}",
+        nokorihai[1]
+    );
 }
 
 #[test]
@@ -81,11 +87,11 @@ fn test_ai_logic_tenpai_priority() {
     // Or maybe discard West.
 
     let tiles = vec![
-        0, 1, 2,        // 123m
-        9, 10, 11,      // 456p
-        18, 19, 20,     // 789s
-        27, 27,         // East pair
-        28, 28,         // South pair
+        0, 1, 2, // 123m
+        9, 10, 11, // 456p
+        18, 19, 20, // 789s
+        27, 27, // East pair
+        28, 28, // South pair
     ];
 
     for (i, &t) in tiles.iter().enumerate() {
@@ -131,11 +137,11 @@ fn test_ai_logic_shanten_progress() {
     // We should discard isolated winds/dragons.
 
     let tiles = vec![
-        0, 1,       // 12m
-        13, 14,     // 56p
-        26, 26,     // 99s
+        0, 1, // 12m
+        13, 14, // 56p
+        26, 26, // 99s
         29, 30, 31, 32, 33, // Winds/Dragons
-        3, 21,      // 4m, 4s (Isolated)
+        3, 21, // 4m, 4s (Isolated)
     ];
 
     for (i, &t) in tiles.iter().enumerate() {
@@ -151,7 +157,11 @@ fn test_ai_logic_shanten_progress() {
     // Should discard one of the honors (29..33) or maybe 2p if it's useless.
     // Honors are usually discarded first.
     // 21 (4s) is also isolated.
-    assert!(pai >= 29 || pai == 10 || pai == 21, "Should discard isolated honor or useless tile, got {}", pai);
+    assert!(
+        pai >= 29 || pai == 10 || pai == 21,
+        "Should discard isolated honor or useless tile, got {}",
+        pai
+    );
 }
 
 #[test]
@@ -253,10 +263,10 @@ fn test_ai_logic_yaku_priority_tanyao() {
     // 456p 456s 22p.
 
     let tiles = vec![
-        0, 1, 2, 3,     // 1m, 2m, 3m, 4m
-        12, 13, 14,     // 456p (Indices 9+3, 9+4, 9+5) -> 12, 13, 14
-        21, 22, 23,     // 456s (Indices 18+3...) -> 21, 22, 23
-        10, 10,         // 2p pair (Indices 9+1) -> 10, 10
+        0, 1, 2, 3, // 1m, 2m, 3m, 4m
+        12, 13, 14, // 456p (Indices 9+3, 9+4, 9+5) -> 12, 13, 14
+        21, 22, 23, // 456s (Indices 18+3...) -> 21, 22, 23
+        10, 10, // 2p pair (Indices 9+1) -> 10, 10
     ];
     // 1m(0), 2m(1), 3m(2), 4m(3)
     // 4p(12), 5p(13), 6p(14)
@@ -278,13 +288,16 @@ fn test_ai_logic_yaku_priority_tanyao() {
     }
     player.tehai_len = 13;
     player.tsumohai = create_pai(3); // Draw 4m
-    // But wait, 1m is in hand (index 0).
-    // So we have 1,2,3,4m.
+                                     // But wait, 1m is in hand (index 0).
+                                     // So we have 1,2,3,4m.
 
     let result = eval_sutehai(&game_state);
     assert!(result.is_ok());
     let (pai, _score) = result.unwrap();
 
     // Expect discard 1m (0) to keep Tanyao potential with 234m.
-    assert_eq!(pai, 0, "Should discard 1m (0) to aim for Tanyao over 4m (3)");
+    assert_eq!(
+        pai, 0,
+        "Should discard 1m (0) to aim for Tanyao over 4m (3)"
+    );
 }
