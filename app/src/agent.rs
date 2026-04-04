@@ -50,9 +50,11 @@ impl Agent for DllAgent {
         Command::perform(async move {
             let inst = inst_ptr as *mut c_void;
             sleep(Duration::from_millis(100));
-            (symbol)(inst, MJPI_SUTEHAI.try_into().unwrap(), tsumohai_num, 0)
-                .try_into()
-                .unwrap()
+            unsafe {
+                (symbol)(inst, MJPI_SUTEHAI.try_into().unwrap(), tsumohai_num, 0)
+                    .try_into()
+                    .unwrap()
+            }
         }, |r| Message::AICommand(r))
     }
 }

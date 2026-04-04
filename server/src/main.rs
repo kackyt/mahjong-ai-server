@@ -16,7 +16,7 @@ use ai_bridge::{
 
 extern crate libc;
 
-type MJPInterfaceFuncP = extern "system" fn(*mut c_void, usize, usize, usize) -> usize;
+type MJPInterfaceFuncP = unsafe extern "system" fn(*mut c_void, usize, usize, usize) -> usize;
 
 #[derive(Parser, Debug)]
 #[command(author, about, version)]
@@ -50,8 +50,7 @@ unsafe fn experiment(func: MJPInterfaceFuncP, inst: *mut c_void, play_log: &mut 
                 .into();
         }
 
-        let ret: u32 = func(inst, MJPI_SUTEHAI as usize, tsumohai_num, 0)
-            as u32;
+        let ret: u32 = func(inst, MJPI_SUTEHAI as usize, tsumohai_num, 0) as u32;
         let index = ret & 0x3F;
         let flag = ret & 0xFF80;
         println!("ret = {} flag = {:04x}", index, flag);

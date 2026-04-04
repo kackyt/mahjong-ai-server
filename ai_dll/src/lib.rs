@@ -301,9 +301,9 @@ pub unsafe extern "system" fn MJPInterfaceFunc(
                     state.tsumohai = -1; // No tile drawn yet
                 }
 
-                if (unsafe { &*std::ptr::addr_of!(G_STATE) }).is_none() {
-                    unsafe { *std::ptr::addr_of_mut!(G_STATE) = Some(GameStateT::default()) };
-                }
+                    if (&*std::ptr::addr_of!(G_STATE)).is_none() {
+                        *std::ptr::addr_of_mut!(G_STATE) = Some(GameStateT::default());
+                    }
                 MESSAGE_FUNC = Some(std::mem::transmute::<usize, MJSendMessage>(param2));
             }
             0
@@ -311,8 +311,8 @@ pub unsafe extern "system" fn MJPInterfaceFunc(
         MJPI_SUTEHAI => {
             unsafe {
                 if let Some(func) = MESSAGE_FUNC {
-                    if let Ok(_) = sync_game_state(inst, func) {
-                        if let Some(state) = unsafe { &*std::ptr::addr_of!(G_STATE) } {
+                    if sync_game_state(inst, func).is_ok() {
+                        if let Some(state) = &*std::ptr::addr_of!(G_STATE) {
                             match eval_sutehai(state) {
                                 Ok((pai, _score)) => {
                                     let player = &state.players[state.teban as usize];
@@ -346,9 +346,7 @@ pub unsafe extern "system" fn MJPInterfaceFunc(
         }
         MJPI_YOURNAME => name_ptr as u32,
         MJPI_DESTROY => {
-            unsafe {
-                *std::ptr::addr_of_mut!(G_STATE) = None;
-            }
+            *std::ptr::addr_of_mut!(G_STATE) = None;
             0
         }
         _ => 0,

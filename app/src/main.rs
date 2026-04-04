@@ -73,9 +73,11 @@ impl AI {
         // sleep(Duration::from_millis(100));
         debug!("AI thinking...");
 
-        (self.symbol)(self.inst, MJPI_SUTEHAI.try_into().unwrap(), tsumohai_num, 0)
-            .try_into()
-            .unwrap()
+        unsafe {
+            (self.symbol)(self.inst, MJPI_SUTEHAI.try_into().unwrap(), tsumohai_num, 0)
+                .try_into()
+                .unwrap()
+        }
     }
 }
 
@@ -90,7 +92,7 @@ impl Drop for AI {
     }
 }
 
-extern "system" fn dummy_func(
+unsafe extern "system" fn dummy_func(
     _inst: *mut std::ffi::c_void,
     _message: usize,
     _param1: usize,

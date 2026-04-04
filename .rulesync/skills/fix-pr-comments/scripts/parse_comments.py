@@ -89,6 +89,13 @@ def fetch_threads(owner, repo, number):
         out = run_cmd(cmd)
         data = json.loads(out)
 
+        if data.get('errors'):
+            messages = '; '.join(
+                e.get('message', 'Unknown GraphQL error') for e in data['errors']
+            )
+            print(f"GraphQL request failed: {messages}")
+            sys.exit(1)
+
         pr_data = data.get('data', {}).get('repository', {}).get('pullRequest', {})
         threads_page = pr_data.get('reviewThreads', {})
 
