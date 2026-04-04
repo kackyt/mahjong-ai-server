@@ -11,7 +11,8 @@
   "license": "ISC",
   "packageManager": "pnpm@10.19.0",
   "devDependencies": {
-    "@fission-ai/openspec": "^1.2.0"
+    "@fission-ai/openspec": "^1.2.0",
+    "@google/jules": "^0.1.42"
   },
   "dependencies": {
     "rulesync": "^7.23.0"
