@@ -23,25 +23,25 @@ The game flow MUST support turn variations for Fuuro (Chi, Pon, Kan).
 
 #### Scenario: Call Actions
 - **WHEN** プレイヤーが捨て牌を行い、他プレイヤーが副露を宣言する
-- **THEN** `run_fulo(world, ...)` System が呼ばれ、`CurrentTurn` タグが副露プレイヤーの Entity に移動する
+- **THEN** `run_fulo(FuloView { .. }, &FuloInput { .. })` System が呼ばれ、`FuloEvent` が返り、呼び出し側が `CurrentTurn` タグを副露プレイヤーの Entity に移動する
 
 ### Requirement: AI Capabilities
 AI players MUST be able to perform standard actions including Riichi and Fuuro.
 
 #### Scenario: AI Riichi
-- **WHEN** AI プレイヤーのターンで `InRiichi` コンポーネントが付与されていない場合にリーチ条件が成立する
-- **THEN** `run_sutehai(world, ..., is_riichi: true)` が呼ばれ、Entity に `InRiichi` コンポーネントが付与される
+- **WHEN** AI プレイヤーのターンで `RiichiStatus.is_riichi` が false の場合にリーチ条件が成立する
+- **THEN** `run_sutehai(SutehaiView { .. }, &SutehaiInput { is_riichi: true, .. })` が呼ばれ、`SutehaiEvent` が返り、呼び出し側が `RiichiStatus.is_riichi` を true に更新する
 
 #### Scenario: AI Fuuro
 - **WHEN** 他プレイヤーの捨て牌が副露可能な状態のとき、AI の副露ロジックが呼ばれる
-- **THEN** `run_fulo(world, ...)` System が呼ばれ、AI プレイヤーの `Hand` と `Mentsu` コンポーネントが更新される
+- **THEN** `run_fulo(FuloView { .. }, &FuloInput { .. })` System が呼ばれ、`FuloEvent` が返り、呼び出し側が `Hand` と `Fulo` コンポーネントを更新する
 
 ### Requirement: Score Exchange
 Points MUST be exchanged between players based on Agari (Win) or Ryuukyoku (Draw).
 
 #### Scenario: Ron Agari
-- **WHEN** `run_ron_agari(world, play_log, winner_idx, loser_idx, pai)` が呼ばれる
-- **THEN** 点数計算（純粋関数）の結果に基づき、winner の `Score` コンポーネントが増加し、loser の `Score` コンポーネントが減少する
+- **WHEN** `run_ron_agari(AgariView { .. }, &AgariInput { winner_idx, loser_idx, pai, .. })` が呼ばれる
+- **THEN** 点数計算（純粋関数）の結果を含む `AgariEvent` が返り、呼び出し側が winner / loser の `Score` コンポーネントを更新する
 
 #### Scenario: Ryuukyoku
 - **WHEN** 山が枯れた状態で局終了処理が行われる

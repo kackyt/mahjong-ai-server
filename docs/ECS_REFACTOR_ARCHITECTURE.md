@@ -36,12 +36,46 @@ DLLインターフェースとの互換性を維持しつつ、安全性を担�
 
 AIコーディングアシスタントが副作用を最小限に抑え、安全にロジックを拡張できる状態を目指す。
 
-- **局所化された副作用**: 「打牌」や「鳴き」の処理を、特定のSystemクラス（または関数）に完結させる。他のSystemを壊すことなく、特定のルール分岐を追加可能にする。
+- **局所化された副作用**: 「打牌」「鸣き」の処理を、特定のSystemクラス（または関数）に完結させる。他のSystemを壊すことなく、特定のルール分岐を追加可能にする。
 - **ガードレールの提供**: 「状態を直接書き換える」代わりに、「コンポーネントを追加/削除する」というECSのパターンを強制することで、複雑な状態遷移バグを抑制する。
+
+### 4.1 型付き Context View パターン（テスタビリティの核心）
+
+各 System は `MahjongWorld` 全体を受け取らず、その System が必要とする Component のみを表す型付き View を受け取る。  
+型がそのまま「依存の宣言」となり、System の責任範囲が自己文書化する。
+
+```
+System の構成 (tsumo を例に)
+══════════════════════════════════════
+
+TsumoView<'w>      TsumoInput          TsumoEvent
+┌──────────┤      ┌──────────┤      ┌──────────┤
+│ &mut Hand  │      │ taku_pai   │      │ tsumohai  │
+│ &mut Cursol│      │ taku_cursol│  --> │ kyoku_id  │
+└──────────┘      │ kyoku_id  │      │ teban     │
+  ライフタイム      │ teban, seq│      │ seq       │
+  付き参照       └──────────┘      └──────────┘
+  (書き換え对象)  POD型 (ライフ    户口記録用
+                   タイムなし)    返り値
+
+テスト時: MahjongWorld 不要。Component を直接構築すればよい。
+```
+
+### 4.2 PlayLog のイベント分離
+
+System は `PlayLog` への書き込みを行わず、`TsumoEvent` 等のイベント型を返すだけにする。  
+`PlayLog` への書き込みは呼び出し側の責任とする。将来の非同期化も呼び出し側の変更だけで対応できる。
+
+```
+従来: run_tsumo(world, play_log) → ()   副作用でログ書き込み
+改善: run_tsumo(view, &input)  → TsumoEvent
+            呼び出し元が play_log.record(event) を呼ぶ
+```
 
 ## 5. 実装ロードマップ（想定）
 
 1. **ECSエンジンの導入**: `hecs` 等の軽量ECSライブラリの導入。
-2. **コンポーネントの定義**: `Hand`, `Discard`, `Score`, `Wind` などの定義。
+2. **コンポーネントの定義**: `Hand`, `DiscardPile`, `Score`, `Wind` などの定義。
 3. **コールバックの再実装**: `interface.rs` の内部を「G_STATE参照」から「Registry検索 ＆ Worldクエリ」に差し替え。
-4. **ロジックの移譲**: 既存の `multi_replace_file_content` などの巨大ロジックを、独立したSystemへ段階的に切り出し。
+4. **ロジックの移譲**: View/Input/Event パターンで `tsumo` / `sutehai` / `fulo` / `agari` を独立した System に分離。PlayLog への書き込みは呼び出し側に移動。
+5. **`MahjongWorld` の封閉**: `pub world` フィールドをプライベート化し、View ファクトリのみを公開 API とする。

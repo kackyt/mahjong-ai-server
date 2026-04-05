@@ -24,21 +24,47 @@
 
 ## 4. Phase 3: ゲームロジックの System 化
 
-- [x] 4.1 `mahjong_core/src/systems/` ディレクトリに必要な System（tsumo.rs 等）を追加する
-- [x] 4.2 `systems/tsumo.rs` に `run_tsumo(world: &mut MahjongWorld, play_log: &mut PlayLog) -> Result<()>` を実装する
-- [x] 4.3 `systems/sutehai.rs` に `run_sutehai(world: &mut MahjongWorld, play_log: &mut PlayLog, index: usize, is_riichi: bool) -> Result<PaiT>` を実装する
-- [ ] 4.4 `systems/fulo.rs` に `run_fulo` / `run_ankan` / `run_kakan` を実装する
-- [ ] 4.5 `systems/agari.rs` に `run_tsumo_agari` / `run_ron_agari` / `run_check_ron` を実装する
-- [ ] 4.6 `systems/scoring.rs` に Entity ID 非依存の点数計算ユーティリティをまとめる
-- [ ] 4.7 各 System の単体テスト（tsumo → sutehai → agari のシーケンス）を追加する
-- [ ] 4.8 `cargo test --features ecs --workspace` が通ることを確認する
+### 4a. View / Input / Event 型の定義
+
+- [ ] 4.1 `mahjong_core/src/systems/types.rs` を新規作成し、各 System 共通のエラー型 `SystemError` を `thiserror` で定義する
+- [ ] 4.2 `systems/tsumo.rs` に `TsumoView<'w>` / `TsumoInput` / `TsumoEvent` 型を定義する
+- [ ] 4.3 `systems/sutehai.rs` に `SutehaiView<'w>` / `SutehaiInput` / `SutehaiEvent` 型を定義する
+- [ ] 4.4 `systems/fulo.rs` に `FuloView<'w>` / `FuloInput` / `FuloEvent` 型を定義する
+- [ ] 4.5 `systems/agari.rs` に `AgariView<'w>` / `AgariInput` / `AgariEvent` 型を定義する
+
+### 4b. MahjongWorld に View ファクトリを追加
+
+- [ ] 4.6 `MahjongWorld::tsumo_view(&mut self, teban: usize) -> TsumoView<'_>` を実装する
+- [ ] 4.7 `MahjongWorld::tsumo_input(&self) -> TsumoInput` を実装する
+- [ ] 4.8 sutehai / fulo / agari の対応ファクトリメソッドを実装する
+
+### 4c. System 関数のシグネチャ置き換え
+
+- [x] 4.9 `run_tsumo(world, play_log)` → `run_tsumo(view: TsumoView<'_>, input: &TsumoInput) -> Result<TsumoEvent, SystemError>` に置き換える
+- [x] 4.10 `run_sutehai(world, play_log, ...)` → `run_sutehai(view: SutehaiView<'_>, input: &SutehaiInput) -> Result<SutehaiEvent, SystemError>` に置き換える
+- [ ] 4.11 `run_fulo` / `run_ankan` / `run_kakan` を同様の View/Input/Event パターンで実装する
+- [ ] 4.12 `run_tsumo_agari` / `run_ron_agari` / `run_check_ron` を同様の View/Input/Event パターンで実装する
+- [ ] 4.13 `systems/scoring.rs` に Entity ID 非依存の点数計算ユーティリティをまとめる
+
+### 4d. PlayLog の分離
+
+- [ ] 4.14 `game_process.rs` の各呼び出し箇所を「`run_XXX(view, &input)?` を呼び、返った Event を `play_log.record()` に渡す」形に写き直す
+- [ ] 4.15 `PlayLog::record(&mut self, event: &GameEvent)` を定義し、各 Event 型 `From<TsumoEvent>` 等の変換実装を追加する
+
+### 4e. 単体テスト
+
+- [ ] 4.16 `systems/tsumo.rs` に `MahjongWorld` 不要の単体テスト（ツモ牌が手牌に入るか、cursor が進むか等）を追加する
+- [ ] 4.17 `systems/sutehai.rs` に単体テスト（リーチ後のツモ切り制約、河牌への追加等）を追加する
+- [ ] 4.18 ツモ → 打牌 → 和了のシーケンス結合テスト（View を連鎖して呼び出す）を `systems/mod.rs` に追加する
+- [ ] 4.19 `cargo test --features ecs --workspace` が通ることを確認する
 
 ## 5. Phase 4: static mut G_STATE の完全廃止
 
 - [ ] 5.1 `ai_bridge/src/interface.rs` から `pub static mut G_STATE` を削除する
 - [ ] 5.2 `game_process.rs` の `GameStateT` impl を ECS System への委譲 wrapper に変更する（`server` / `app` / `sample` への互換 API を維持）
-- [ ] 5.3 残存する `unsafe` ブロックを FFI 境界のみに限定し、コメントで理由を記載する
-- [ ] 5.4 `cargo clippy --all-targets --all-features -- -D warnings` / `cargo fmt --all -- --check` / `cargo test --workspace` が全て通ることを確認する
+- [ ] 5.3 `MahjongWorld` の `pub world: World` フィールドをプライベート化し、System が直接クエリを発行できない構造にする
+- [ ] 5.4 残存する `unsafe` ブロックを FFI 境界のみに限定し、コメントで理由を記載する
+- [ ] 5.5 `cargo clippy --all-targets --all-features -- -D warnings` / `cargo fmt --all -- --check` / `cargo test --workspace` が全て通ることを確認する
 
 ## 6. 最終検証
 
