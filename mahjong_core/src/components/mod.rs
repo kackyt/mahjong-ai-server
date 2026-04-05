@@ -23,3 +23,16 @@ pub struct Score {
 pub struct Wind {
     pub wind: u32,
 }
+
+pub struct RiichiStatus {
+    pub is_riichi: bool,
+    pub is_ippatsu: bool,
+}
+
+pub struct PlayerInfo {
+    pub name: String,
+}
+
+pub struct Cursol {
+    pub cursol: u32,
+}

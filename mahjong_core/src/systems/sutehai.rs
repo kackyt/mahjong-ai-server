@@ -1,8 +1,9 @@
 use crate::components::world::MahjongWorld;
 use crate::mahjong_generated::open_mahjong::PaiT;
 use crate::play_log::PlayLog;
-use crate::components::{Hand, DiscardPile};
-use anyhow::Result;
+use crate::components::{Hand, DiscardPile, RiichiStatus};
+use anyhow::{Result, ensure};
+
 pub fn run_sutehai(
     world: &mut MahjongWorld,
     play_log: &mut PlayLog,
@@ -14,16 +15,26 @@ pub fn run_sutehai(
     let seq = world.context.seq;
     
     let entity = world.query_player(teban).unwrap();
-    let mut binding = world.world.query_one::<(&mut Hand, &mut DiscardPile)>(entity).unwrap();
-    let (hand, discard_pile) = binding.get().unwrap();
+    let mut q = world.world.query_one::<(&mut Hand, &mut DiscardPile, &mut RiichiStatus)>(entity).unwrap();
+    let (hand, discard_pile, riichi_status) = q.get().unwrap();
     
-    // Some logic checks, like ensure!(hand.is_tsumo, "ツモしていません"); 
-    // are currently deferred back to game_process.rs as they intertwine with non-ECS states (like riichi flags which we didn't migrate to Hand yet).
     let tehai_len = hand.tiles.len();
-
     let is_tsumogiri = index >= tehai_len;
 
+    if riichi_status.is_riichi {
+        ensure!(is_tsumogiri, "リーチ後はツモ切りのみです");
+    }
+
+    if is_riichi {
+        ensure!(!riichi_status.is_riichi, "すでにリーチしています");
+        riichi_status.is_riichi = true;
+        riichi_status.is_ippatsu = true;
+    } else {
+        riichi_status.is_ippatsu = false;
+    }
+
     let mut kawahai = if is_tsumogiri {
+        ensure!(hand.is_tsumo, "ツモしていません (ツモ切り不可)");
         hand.tsumohai.clone().unwrap()
     } else {
         hand.tiles[index].clone()
@@ -56,8 +67,9 @@ pub fn run_sutehai(
     );
 
     world.context.seq += 1;
-    // Turn cycling logic will still run correctly from `to_game_state` mapping but we can map it here
-    // However, it's safer to let game_process handle `teban` changes until full rewrite since it relies on player_len which isn't always 4
+    
+    // Turn cycling
+    world.context.teban = (world.context.teban + 1) % world.players.len() as u32;
     
     Ok(kawahai)
 }

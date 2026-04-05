@@ -1,4 +1,4 @@
-use super::{DiscardPile, Hand, Score, Wind, Fulo};
+use super::{DiscardPile, Fulo, Hand, PlayerInfo, RiichiStatus, Score, Wind, Cursol};
 use crate::mahjong_generated::open_mahjong::{GameStateT, RuleT, TakuT};
 use hecs::{Entity, World};
 
@@ -38,6 +38,9 @@ impl MahjongWorld {
                 Fulo { mentsu: Vec::new() },
                 Score { score: 25000 },
                 Wind { wind: 0 },
+                RiichiStatus { is_riichi: false, is_ippatsu: false },
+                PlayerInfo { name: String::new() },
+                Cursol { cursol: 0 },
             ));
             players.push(entity);
         }
@@ -102,6 +105,16 @@ impl MahjongWorld {
                 },
                 Wind {
                     wind: (state.bakaze + i as u32) % 4, // Needs true wind calc
+                },
+                RiichiStatus {
+                    is_riichi: player_state.is_riichi,
+                    is_ippatsu: player_state.is_ippatsu,
+                },
+                PlayerInfo {
+                    name: String::from_utf8_lossy(&player_state.name.pack().0).to_string(),
+                },
+                Cursol {
+                    cursol: player_state.cursol,
                 },
             ));
             players.push(entity);
@@ -172,6 +185,19 @@ impl MahjongWorld {
             
             if let Some(score) = self.world.query_one::<&Score>(entity).unwrap().get() {
                 player.score = score.score;
+            }
+
+            if let Some(riichi) = self.world.query_one::<&RiichiStatus>(entity).unwrap().get() {
+                player.is_riichi = riichi.is_riichi;
+                player.is_ippatsu = riichi.is_ippatsu;
+            }
+
+            if let Some(info) = self.world.query_one::<&PlayerInfo>(entity).unwrap().get() {
+                player.name = info.name.as_bytes().into();
+            }
+
+            if let Some(cursol) = self.world.query_one::<&Cursol>(entity).unwrap().get() {
+                player.cursol = cursol.cursol;
             }
             
             // Note: jikaze is not modeled in PlayerT, but maybe calculated dynamically

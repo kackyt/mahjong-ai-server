@@ -94,11 +94,17 @@ unsafe fn mjsend_message_impl(
     param2: usize,
     pstate: &mut PaiState,
 ) -> usize {
-    let _inst_usize = inst as usize;
+    let inst_usize = inst as usize;
+    let mut registry = G_REGISTRY.lock().unwrap();
 
     // Convert world to GameStateT for compatibility until the DLL is fully updated.
-    let _taku_fallback: GameStateT = Default::default(); // Not ideal, but we need GameStateT temporarily
-    let taku: &GameStateT = unsafe { &*std::ptr::addr_of!(G_STATE) }; // To be completely replaced when DLL uses ECS directly
+    let mut local_state: GameStateT = Default::default();
+    let taku: &GameStateT = if let Some(world) = registry.get_mut(inst_usize) {
+        world.to_game_state(&mut local_state);
+        &local_state
+    } else {
+        unsafe { &*std::ptr::addr_of!(G_STATE) }
+    };
 
     /*
     println!(

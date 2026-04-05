@@ -236,75 +236,36 @@ impl GameStateT {
         let mut world = crate::components::world::MahjongWorld::from_game_state(self);
         crate::systems::tsumo::run_tsumo(&mut world, play_log)?;
         world.to_game_state(self);
-        
-        // Ensure cursol compatibility for non-ecs things
-        if self.is_non_duplicate {
-            self.next_cursol(); // Keep tracking logic valid
-        } else {
-            self.players[self.teban as usize].cursol += 1;
-        }
-
         Ok(())
     }
 
     /// 牌を捨てます。立直判定や一発の解除、河への追加を行います。
-    /// TODO: 副露対応を捨て牌処理に実装する（後日Issue化）
-    ///
-    /// # Arguments
-    /// * `play_log` - ログ
-    /// * `index` - 捨てる牌の手牌インデックス（13の場合はツモ切り）
-    /// * `is_riichi` - 立直宣言するかどうか
     pub fn sutehai(
         &mut self,
         play_log: &mut PlayLog,
         index: usize,
         is_riichi: bool,
     ) -> anyhow::Result<PaiT> {
-        let teban = self.teban as usize;
-        let player = &mut self.players[teban];
-        let tehai_len = player.tehai_len as usize;
-        let is_tsumogiri = index == tehai_len;
-
-        ensure!(index <= tehai_len, "Invalid discard index");
-        if !player.is_tsumo {
-            ensure!(!is_tsumogiri, "Cannot tsumogiri after fulo (no tsumo tile)");
-        }
-        ensure!(
-            !player.is_riichi || is_tsumogiri,
-            GameProcessError::IllegalSutehaiAfterRiichi
-        );
-
+        // Validation that still requires non-ECS or legacy structures
         if is_riichi {
-            ensure!(!player.is_riichi, "すでにリーチしています");
+            let player = &self.players[self.teban as usize];
             ensure!(player.mentsu_len == 0, "面前ではありません");
-
-            let mut tehai_check: Vec<PaiT> = player.tehai.iter().take(tehai_len).cloned().collect();
-            if !is_tsumogiri {
+            
+            // Riichi eligibility check (shanten)
+            let mut tehai_check: Vec<PaiT> = player.tehai.iter().take(player.tehai_len as usize).cloned().collect();
+            if index < player.tehai_len as usize {
                 tehai_check.remove(index);
                 tehai_check.push(player.tsumohai.clone());
                 tehai_check.sort_unstable();
             }
-
             let mut state = PaiState::from(&tehai_check);
             let shanten = state.get_shanten(player.mentsu_len as usize);
             ensure!(shanten == 0, "テンパイではありません");
-
-            player.is_riichi = true;
-            player.is_ippatsu = true;
-            player.score -= 1000;
-        } else {
-            player.is_ippatsu = false;
         }
 
         let mut world = crate::components::world::MahjongWorld::from_game_state(self);
-        let mut kawahai = crate::systems::sutehai::run_sutehai(&mut world, play_log, index, is_riichi)?;
+        let kawahai = crate::systems::sutehai::run_sutehai(&mut world, play_log, index, is_riichi)?;
         world.to_game_state(self);
-
-        // Turn logic (cannot safely map inside sutehai.rs due to player count variability)
-        self.teban = (self.teban + 1) % self.player_len;
-        self.players[teban].kawahai_len += 1;
-        self.players[teban].tsumohai = Default::default();
-        kawahai.is_tsumogiri = is_tsumogiri;
 
         Ok(kawahai)
     }
