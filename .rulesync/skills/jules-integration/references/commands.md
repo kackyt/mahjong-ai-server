@@ -1,41 +1,35 @@
-# Jules CLI コマンドリファレンス
+# Jules コマンドリファレンス (MCP対応版)
 
-Julesは、分離されたクラウド環境でタスクを実行する自律型AIコーディングエージェントです。
+Julesは、分離されたクラウド環境でタスクを実行する自律型AIコーディングエージェントです。Antigravityからは、高度な制御が可能な **MCP ツール** を優先して使用します。
 
-## 基本コマンド
-
-### プロジェクトへの追加
-プロジェクトで `pnpm jules` を使用できるようにするために、以下のコマンドが事前に実行されている必要があります。
-```bash
-pnpm add -D @google/jules
-```
-
-### 認証
-Julesを使用するにはGoogleアカウントでのログインが必要です。
-```bash
-pnpm jules login
-pnpm jules logout
-```
-
-## リモートセッション管理
+## 1. セッション管理 (MCPツール優先)
 
 ### セッションの新規作成
-Julesにタスクを依頼します。
-```bash
-pnpm jules remote new --session "タスクの内容"
-```
-例:
-```bash
-pnpm jules remote new --session "UnitIdをNewtypeパターンで実装し、ドメインロジックをリファクタリングしてください"
-```
+Julesにタスクを依頼します。詳細なパラメータ指定が可能です。
+- **ツール**: `mcp_jules_create_session`
+- **主要パラメータ**:
+    - `prompt`: タスクの詳細な指示。
+    - `branch`: 開始ブランチ名（現在のブランチを `git rev-parse --abbrev-ref HEAD` 等で取得して指定）。
+    - `autoPr`: `true` (完了時に自動的にプルリクエストを作成)。
+    - `repo`: 対象リポジトリ名 (例: `kackyt/mahjong-ai-server`)。
+
+### セッション状態の監視
+- **ツール**: `mcp_jules_get_session_state`
+    - セッションIDを指定して、現在のステータス（`busy`, `stable`, `failed`）や最新のアクティビティを確認します。
+    - `lastAgentMessage` や `pendingPlan` がある場合、それに応じて返信（`mcp_jules_send_reply_to_session`）を行います。
 
 ### セッション一覧の表示
-現在進行中または完了したセッションを確認します。
-```bash
-pnpm jules remote list --session
-```
+- **ツール**: `mcp_jules_list_sessions`
+    - 最近のセッション一覧をリストアップします。
 
-## 成果物の取り込み
+## 2. 作業結果のレビュー (MCPツール)
+成果物をローカルに取り込む前に、必ず内容をレビューしてください。
+
+- **ファイル一覧の確認**: `mcp_jules_get_code_review_context`
+- **コード差分の精査**: `mcp_jules_show_code_diff`
+
+## 3. 成果物の取り込み (CLI)
+作業結果をローカルリポジトリに適用します。この操作は CLI を使用します。
 
 ### 方法A: Teleport (推奨)
 既存のリポジトリにセッションのパッチを直接適用します。
@@ -44,24 +38,13 @@ pnpm jules teleport <SESSION_ID>
 ```
 
 ### 方法B: Remote Pull
-セッションの結果を取得し、適用します。
 ```bash
 pnpm jules remote pull --session <SESSION_ID> --apply
 ```
 
-## セッションステータスの見方
-`pnpm jules remote list --session` で表示されるステータスの意味：
-- `Planning`: 計画作成中または承認待ち。成果物（パッチ）はまだありません。
-- `Planned` / `In Progress`: 実行フェーズ. コード変更が行われています。
-- `Complete`: 正常終了。成果物が取り込み可能です。
-- `Failed`: 失敗。
+---
 
-## トラブルシューティング：ENOENTエラー
-`spawn ... jules.exe ENOENT` が発生した場合は、以下の直接パスを試してください。
-`%LOCALAPPDATA%\Temp\jules_tmp\jules.exe`（または環境に応じた `.../jules_tmp/jules.exe`）
-
-また、 `pnpm install --force @google/jules` でパッケージを強制再インストールすることで、パス設定が更新される場合があります。
-
-## プルリクエストについて
-Julesはタスクを完了すると、自動的にフィーチャーブランチを作成してプルリクエストをオープンします。CLIから明示的に「PRを作成する」コマンドを叩く必要はありません。
-セッション完了後、GitHub上でPRを確認してください。
+## 運用ルール (Antigravity用)
+1. **ブランチ指定**: `mcp_jules_create_session` 呼び出し時には、必ず `--branch` パラメータに現在の作業ブランチを含めること。
+2. **レビューフロー**: `Completed` 到着後、すぐに `teleport` せず、まず `mcp_jules_show_code_diff` で内容を精査し、ユーザーに要約を報告すること。
+3. **対話**: Julesがプランを提示した場合は、 `mcp_jules_send_reply_to_session` で承認またはフィードバックを返し、自律的に作業を完結させること。

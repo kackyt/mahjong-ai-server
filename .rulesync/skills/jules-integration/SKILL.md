@@ -1,74 +1,55 @@
 ---
 name: jules-integration
-description: Jules AI（Googleの自律型コーディングエージェント）を専用のCLI（@google/jules）を通じて操作し、タスクの委譲、リモートセッション（Session）の管理、作業結果の取り込みを自律的に行います。Julesに対してコードのリファクタリング、バグ修正、テスト実装などを指示し、完了後にプルリクエストとして結果を確認する際に使用します。
+description: >-
+  Jules AI（Googleの自律型コーディングエージェント）を MCP ツール（jules）を通じて操作し、タスクの提出、状態管理、成果物のレビューを自律的に行います。MCPによってブランチ指定や自動PR作成などの高度な制御が可能になります。
 ---
+# Jules Integration (MCP Priority)
 
-# Jules Integration
+Jules AI（Googleの自律型コーディングエージェント）と連携し、複雑なコーディングタスクを効率的に委譲するためのスキルです。
 
-Jules AI（Googleの自律型コーディングエージェント）をコマンドラインから操作するためのスキルです。
-
-## 基本的なワークフロー
-
-### 0. 事前チェック (Diagnostic)
-Julesを実行する前に、以下のコマンドで環境が整っているか確認してください。
-```bash
-# バイナリと認証の確認
-pnpm jules --help
-```
 > [!IMPORTANT]
-> **ENOENTエラーが発生する場合**: `spawn ... jules.exe ENOENT` というエラーが出る場合は、Node.jsラッパーがバイナリを見失っています。
-> その場合、 `%LOCALAPPDATA%\Temp\jules_tmp\jules.exe`（または環境に応じた `.../jules_tmp/jules.exe`）を直接実行するか、 `pnpm install --force @google/jules` を試行してください。
-
-> [!NOTE]
-> **認証の必須**: `jules login` が未完了の場合、コマンドはハングしたり失敗したりします。
+> **MCP優先原則**: `jules` MCP サーバーが利用可能な環境では、CLI コマンドよりも **MCP ツール（`mcp_jules_create_session` 等）を最優先で使用してください。** これにより、ブランチの明示的な指定や自動 PR 作成などの高度な制御が確実に行えます。
 
 ## 基本的なワークフロー
 
-### 1. タスクの委譲 (Remote New)
-Julesに新しい作業を依頼します。
-```bash
-pnpm jules remote new --session "指示内容"
-```
+### 1. セッションの作成 (MCP優先)
+Julesに新しい作業を依頼します。現在のブランチを自動で付与するのがベストプラクティスです。
+- **ツール**: `mcp_jules_create_session`
+- **パラメータ例**:
+  - `prompt`: "指示内容..."
+  - `repo`: "kackyt/mahjong-ai-server"
+  - `branch`: "現在のブランチ名" (例: `git rev-parse --abbrev-ref HEAD` の実行結果)
+  - `autoPr`: `true` (完了時に自動的にPRを作成)
 
-### 2. セッションの監視 (Remote List - 重要)
-進行中のタスクの状態を確認します。
-```bash
-pnpm jules remote list --session
-```
-> [!TIP]
-> Statusが `Planning` の場合、Julesはまだ計画を作成中か、計画の承認待ちです。
-> `Completed` または `In Progress` (実行フェーズ) になっていることを確認してから成果物を取り込んでください。
+### 2. 状態の監視
+セッションが完了したか、または承認待ちかを確認します。
+- **ツール**: `mcp_jules_get_session_state`
+- **活用**: Julesがプラン（計画）を提示している場合は、 `mcp_jules_send_reply_to_session` で `action='approve'` を送信して作業を継続させます。
 
-### 3. 成果物の取り込み (Teleport / Pull)
-作業結果を現在のローカルリポジトリに適用します。推奨される方法は以下の2つです。
+### 3. 作業内容のレビュー
+成果物を取り込む前に、MCPツールで変更内容を精査します。
+- **ツール**: `mcp_jules_get_code_review_context` (ファイル一覧と変更概要)
+- **ツール**: `mcp_jules_show_code_diff` (具体的なコード差分)
 
-#### 方法A: Teleport (推奨)
-既存のリポジトリにセッションのパッチを直接適用します。
+### 4. 成果物のローカルへの取り込み (CLI使用)
+Julesが作成した変更をローカル環境に適用します。この操作はローカルファイルへの書き込みを伴うため、CLIを使用します。
+
 ```bash
+# 方法A: Teleport (推奨)
 pnpm jules teleport <SESSION_ID>
-```
 
-#### 方法B: Remote Pull
-明示的に成果物（パッチ）をダウンロードして適用します。
-```bash
+# 方法B: Remote Pull
 pnpm jules remote pull --session <SESSION_ID> --apply
 ```
 
-> [!CAUTION]
-> **取り込み前の注意**: 不意な変更の上書きを防ぐため、取り込み前にJulesのセッションを **Pause** しておくことが推奨されます。
+---
+
+## 運用上の注意点
+
+- **ブランチの同期**: 新しいセッションを開始する前に、必ず最新の `main` を反映（merge/rebase）させた作業ブランチから開始してください。
+- **指示の具体性**: 具体的なファイルパスや型の定義（HECS, Newtypeパターン等の規約）をプロンプトに含めてください。
+- **認証**: 初回やセッション切れの際は `pnpm jules login` を実行して、Googleアカウントでのログインを完了させておく必要があります。
 
 ## トラブルシューティング
-
-### コマンドがハングする
-- `jules login` が完了しているか確認してください。
-- インターネット接続を確認してください。
-- セッションの状態が `Planning` のままの場合、成果物がないため待機状態になることがあります。
-
-### 成果物が適用されない
-- `git status` で変更が未コミット状態で残っていないか確認してください。
-- `teleport` と `pull --apply` の両方を試してください。
-
-## Julesへの指示のコツ
-- **具体性**: 具体的なファイルパスや型名、アーキテクチャパターン（例: Newtypeパターン, HECS, DDD）を指示に含めると、Julesがより正確に実装を行います。
-- **コンテキストの提供**: 必要に応じて、特定ファイルの出力をパイプで渡すことも検討してください。
-  `cat src/lib.rs | pnpm jules remote new --session "このファイルのリファクタリングをお願いします"`
+- **CLIツールがエラーを返す**: `jules login` が切れている可能性があります。ターミナルでログイン状態を確認してください。
+- **成果物が見つからない**: セッション状態が `Completed` になっていることを確認してください。
