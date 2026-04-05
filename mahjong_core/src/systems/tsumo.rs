@@ -2,9 +2,9 @@ use crate::components::world::MahjongWorld;
 #[allow(unused_imports)]
 use crate::mahjong_generated::open_mahjong::GameStateT;
 use crate::play_log::PlayLog;
-use anyhow::Result;
+use anyhow::{ensure, Context, Result};
 
-use crate::components::{Hand, Cursol};
+use crate::components::{Cursol, Hand};
 use crate::fbs_utils::TakuControl;
 
 pub fn run_tsumo(world: &mut MahjongWorld, play_log: &mut PlayLog) -> Result<()> {
@@ -13,10 +13,18 @@ pub fn run_tsumo(world: &mut MahjongWorld, play_log: &mut PlayLog) -> Result<()>
     let kyoku_id = world.context.kyoku_id;
     let is_non_duplicate = world.context.is_non_duplicate;
 
-    let entity = world.query_player(teban).unwrap();
-    let mut q = world.world.query_one::<(&mut Hand, &mut Cursol)>(entity).unwrap();
-    let (hand, cursol_comp) = q.get().unwrap();
-    
+    let entity = world
+        .query_player(teban)
+        .context("手番プレイヤーの Entity が見つかりません")?;
+    let mut q = world
+        .world
+        .query_one::<(&mut Hand, &mut Cursol)>(entity)
+        .context("手番プレイヤーのコンポーネント取得に失敗しました")?;
+    let (hand, cursol_comp) = q
+        .get()
+        .context("手番プレイヤーのコンポーネントが不完全です")?;
+
+    ensure!(!hand.is_tsumo, "すでにツモしています");
     hand.is_tsumo = true;
 
     let cursol_val = if is_non_duplicate {
@@ -24,7 +32,7 @@ pub fn run_tsumo(world: &mut MahjongWorld, play_log: &mut PlayLog) -> Result<()>
     } else {
         cursol_comp.cursol as usize
     };
-    
+
     let tsumohai = world.context.taku.get(cursol_val)?;
     hand.tsumohai = Some(tsumohai.clone());
 

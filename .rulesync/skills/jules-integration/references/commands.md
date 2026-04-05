@@ -58,7 +58,7 @@ pnpm jules remote pull --session <SESSION_ID> --apply
 
 ## トラブルシューティング：ENOENTエラー
 `spawn ... jules.exe ENOENT` が発生した場合は、以下の直接パスを試してください。
-`C:\Users\t_kak\AppData\Local\Temp\jules_tmp\jules.exe`
+`%LOCALAPPDATA%\Temp\jules_tmp\jules.exe`（または環境に応じた `.../jules_tmp/jules.exe`）
 
 また、 `pnpm install --force @google/jules` でパッケージを強制再インストールすることで、パス設定が更新される場合があります。
 

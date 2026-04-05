@@ -1,6 +1,4 @@
-import subprocess
-import sys
-import json
+import argparse
 
 def run_command(args):
     cmd = ["pnpm", "jules"] + args
@@ -30,18 +28,28 @@ def pull_session(session_id, apply=False):
         print(output)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python jules_helper.py [list|new|pull] [args...]")
-        sys.exit(1)
-    
-    cmd = sys.argv[1]
-    if cmd == "list":
+    parser = argparse.ArgumentParser(description="Jules helper script")
+    subparsers = parser.add_subparsers(dest="command", help="Commands")
+
+    # List command
+    subparsers.add_parser("list", help="List remote sessions")
+
+    # New command
+    new_parser = subparsers.add_parser("new", help="Create a new remote session")
+    new_parser.add_argument("prompt", help="Instructions for the new session")
+
+    # Pull command
+    pull_parser = subparsers.add_parser("pull", help="Pull results from a remote session")
+    pull_parser.add_argument("session_id", help="ID of the session to pull")
+    pull_parser.add_argument("--apply", action="store_true", help="Apply the pulled changes")
+
+    args = parser.parse_args()
+
+    if args.command == "list":
         list_sessions()
-    elif cmd == "new" and len(sys.argv) > 2:
-        create_session(sys.argv[2])
-    elif cmd == "pull" and len(sys.argv) > 2:
-        apply = "--apply" in sys.argv
-        session_id = sys.argv[2]
-        pull_session(session_id, apply)
+    elif args.command == "new":
+        create_session(args.prompt)
+    elif args.command == "pull":
+        pull_session(args.session_id, args.apply)
     else:
-        print("Invalid arguments")
+        parser.print_help()

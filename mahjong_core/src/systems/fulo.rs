@@ -1,13 +1,13 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 pub fn run_fulo() -> Result<()> {
-    Ok(())
+    bail!("run_fulo is not implemented yet")
 }
 
 pub fn run_ankan() -> Result<()> {
-    Ok(())
+    bail!("run_ankan is not implemented yet")
 }
 
 pub fn run_kakan() -> Result<()> {
-    Ok(())
+    bail!("run_kakan is not implemented yet")
 }

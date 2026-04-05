@@ -20,6 +20,6 @@ walkdir = { version = "2.4.0", optional = true }
 
 [features]
 default = ["std"]
-std = ["dep:parquet", "dep:arrow-array", "dep:walkdir", "dep:chrono", "dep:rand", "dep:uuid", "itertools/use_std"]
+std = ["dep:parquet", "dep:arrow-array", "dep:walkdir", "dep:chrono", "dep:rand", "dep:uuid", "itertools/use_std", "ecs"]
 ecs = ["dep:hecs"]
 load-pailist = ["std"]

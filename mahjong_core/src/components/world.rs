@@ -1,4 +1,4 @@
-use super::{DiscardPile, Fulo, Hand, PlayerInfo, RiichiStatus, Score, Wind, Cursol};
+use super::{Cursol, DiscardPile, Fulo, Hand, PlayerInfo, RiichiStatus, Score, Wind};
 use crate::mahjong_generated::open_mahjong::{GameStateT, RuleT, TakuT};
 use hecs::{Entity, World};
 
@@ -33,13 +33,22 @@ impl MahjongWorld {
 
         for _ in 0..player_len {
             let entity = world.spawn((
-                Hand { tiles: Vec::new(), tsumohai: None, is_tsumo: false },
+                Hand {
+                    tiles: Vec::new(),
+                    tsumohai: None,
+                    is_tsumo: false,
+                },
                 DiscardPile { tiles: Vec::new() },
                 Fulo { mentsu: Vec::new() },
                 Score { score: 25000 },
                 Wind { wind: 0 },
-                RiichiStatus { is_riichi: false, is_ippatsu: false },
-                PlayerInfo { name: String::new() },
+                RiichiStatus {
+                    is_riichi: false,
+                    is_ippatsu: false,
+                },
+                PlayerInfo {
+                    name: String::new(),
+                },
                 Cursol { cursol: 0 },
             ));
             players.push(entity);
@@ -87,7 +96,7 @@ impl MahjongWorld {
             } else {
                 None
             };
-            
+
             let entity = world.spawn((
                 Hand {
                     tiles: player_state.tehai[..player_state.tehai_len as usize].to_vec(),
@@ -104,7 +113,7 @@ impl MahjongWorld {
                     score: player_state.score,
                 },
                 Wind {
-                    wind: (state.bakaze + i as u32) % 4, // Needs true wind calc
+                    wind: (i as u32 + 4 - state.oya) % 4,
                 },
                 RiichiStatus {
                     is_riichi: player_state.is_riichi,
@@ -142,10 +151,12 @@ impl MahjongWorld {
             },
         }
     }
-    
+
     pub fn to_game_state(&self, state: &mut GameStateT) {
         state.title = self.context.title.as_bytes().into();
-        state.game_id.copy_from_slice(&self.context.game_id);
+        let game_id_len = self.context.game_id.len().min(state.game_id.len());
+        state.game_id.fill(0);
+        state.game_id[..game_id_len].copy_from_slice(&self.context.game_id[..game_id_len]);
         state.kyoku_id = self.context.kyoku_id;
         state.bakaze = self.context.bakaze;
         state.oya = self.context.oya;
@@ -163,43 +174,64 @@ impl MahjongWorld {
 
         for (i, &entity) in self.players.iter().enumerate() {
             let player = &mut state.players[i];
-            
-            if let Some(hand) = self.world.query_one::<&Hand>(entity).unwrap().get() {
-                player.tehai_len = hand.tiles.len() as u32;
-                player.tehai[..hand.tiles.len()].clone_from_slice(&hand.tiles);
-                player.is_tsumo = hand.is_tsumo;
-                if let Some(tsumo) = &hand.tsumohai {
-                    player.tsumohai = tsumo.clone();
+
+            if let Ok(mut q) = self.world.query_one::<&Hand>(entity) {
+                if let Some(hand) = q.get() {
+                    let len = hand.tiles.len().min(player.tehai.len());
+                    player.tehai_len = len as u32;
+                    for i in 0..len {
+                        player.tehai[i] = hand.tiles[i].clone();
+                    }
+                    if let Some(tsumo) = &hand.tsumohai {
+                        player.tsumohai = tsumo.clone();
+                    } else {
+                        player.tsumohai = Default::default();
+                    }
+                    player.is_tsumo = hand.is_tsumo;
                 }
             }
-            
-            if let Some(discard) = self.world.query_one::<&DiscardPile>(entity).unwrap().get() {
-                player.kawahai_len = discard.tiles.len() as u32;
-                player.kawahai[..discard.tiles.len()].clone_from_slice(&discard.tiles);
-            }
-            
-            if let Some(fulo) = self.world.query_one::<&Fulo>(entity).unwrap().get() {
-                player.mentsu_len = fulo.mentsu.len() as u32;
-                player.mentsu[..fulo.mentsu.len()].clone_from_slice(&fulo.mentsu);
-            }
-            
-            if let Some(score) = self.world.query_one::<&Score>(entity).unwrap().get() {
-                player.score = score.score;
+
+            if let Ok(mut q) = self.world.query_one::<&DiscardPile>(entity) {
+                if let Some(discard) = q.get() {
+                    let len = discard.tiles.len().min(player.kawahai.len());
+                    player.kawahai_len = len as u32;
+                    player.kawahai[..len].clone_from_slice(&discard.tiles[..len]);
+                }
             }
 
-            if let Some(riichi) = self.world.query_one::<&RiichiStatus>(entity).unwrap().get() {
-                player.is_riichi = riichi.is_riichi;
-                player.is_ippatsu = riichi.is_ippatsu;
+            if let Ok(mut q) = self.world.query_one::<&Fulo>(entity) {
+                if let Some(fulo) = q.get() {
+                    let len = fulo.mentsu.len().min(player.mentsu.len());
+                    player.mentsu_len = len as u32;
+                    player.mentsu[..len].clone_from_slice(&fulo.mentsu[..len]);
+                }
             }
 
-            if let Some(info) = self.world.query_one::<&PlayerInfo>(entity).unwrap().get() {
-                player.name = info.name.as_bytes().into();
+            if let Ok(mut q) = self.world.query_one::<&Score>(entity) {
+                if let Some(score) = q.get() {
+                    player.score = score.score;
+                }
             }
 
-            if let Some(cursol) = self.world.query_one::<&Cursol>(entity).unwrap().get() {
-                player.cursol = cursol.cursol;
+            if let Ok(mut q) = self.world.query_one::<&RiichiStatus>(entity) {
+                if let Some(riichi) = q.get() {
+                    player.is_riichi = riichi.is_riichi;
+                    player.is_ippatsu = riichi.is_ippatsu;
+                }
             }
-            
+
+            if let Ok(mut q) = self.world.query_one::<&PlayerInfo>(entity) {
+                if let Some(info) = q.get() {
+                    player.name = info.name.as_bytes().into();
+                }
+            }
+
+            if let Ok(mut q) = self.world.query_one::<&Cursol>(entity) {
+                if let Some(cursol) = q.get() {
+                    player.cursol = cursol.cursol;
+                }
+            }
+
             // Note: jikaze is not modeled in PlayerT, but maybe calculated dynamically
         }
     }
@@ -208,6 +240,7 @@ impl MahjongWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mahjong_generated::open_mahjong::{GameStateT, PlayerT};
 
     #[test]
     fn test_mahjong_world_new() {
@@ -222,10 +255,24 @@ mod tests {
 
     #[test]
     fn test_mahjong_world_from_game_state() {
-        let mut state = GameStateT::default();
-        state.player_len = 2;
-        state.players[0].score = 30000;
-        state.players[1].score = 20000;
+        let players: [PlayerT; 4] = [
+            PlayerT {
+                score: 30000,
+                ..Default::default()
+            },
+            PlayerT {
+                score: 20000,
+                ..Default::default()
+            },
+            PlayerT::default(),
+            PlayerT::default(),
+        ];
+
+        let state = GameStateT {
+            player_len: 2,
+            players,
+            ..Default::default()
+        };
 
         let world = MahjongWorld::from_game_state(&state);
         assert_eq!(world.players.len(), 2);

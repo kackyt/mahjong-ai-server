@@ -1,13 +1,13 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 pub fn run_tsumo_agari() -> Result<()> {
-    Ok(())
+    bail!("run_tsumo_agari is not implemented yet")
 }
 
 pub fn run_ron_agari() -> Result<()> {
-    Ok(())
+    bail!("run_ron_agari is not implemented yet")
 }
 
 pub fn run_check_ron() -> Result<()> {
-    Ok(())
+    bail!("run_check_ron is not implemented yet")
 }

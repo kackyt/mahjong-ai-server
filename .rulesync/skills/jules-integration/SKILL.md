@@ -17,7 +17,7 @@ pnpm jules --help
 ```
 > [!IMPORTANT]
 > **ENOENTエラーが発生する場合**: `spawn ... jules.exe ENOENT` というエラーが出る場合は、Node.jsラッパーがバイナリを見失っています。
-> その場合、 `C:\Users\t_kak\AppData\Local\Temp\jules_tmp\jules.exe` を直接実行するか、 `pnpm install --force @google/jules` を試行してください。
+> その場合、 `%LOCALAPPDATA%\Temp\jules_tmp\jules.exe`（または環境に応じた `.../jules_tmp/jules.exe`）を直接実行するか、 `pnpm install --force @google/jules` を試行してください。
 
 > [!NOTE]
 > **認証の必須**: `jules login` が未完了の場合、コマンドはハングしたり失敗したりします。

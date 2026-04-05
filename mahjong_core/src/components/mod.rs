@@ -1,6 +1,6 @@
 pub mod world;
 
-use crate::mahjong_generated::open_mahjong::{PaiT, MentsuT};
+use crate::mahjong_generated::open_mahjong::{MentsuT, PaiT};
 
 pub struct Hand {
     pub tiles: Vec<PaiT>,

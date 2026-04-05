@@ -324,7 +324,10 @@ impl Application for App {
                                 let ai = self.ai_instances[next_teban - 1].clone();
                                 let tsumohai_num: usize =
                                     state.players[next_teban].tsumohai.pai_num.into();
-                                return Command::perform(ai.ai_next(tsumohai_num), Message::AICommand);
+                                return Command::perform(
+                                    ai.ai_next(tsumohai_num),
+                                    Message::AICommand,
+                                );
                             }
                         }
                     }
@@ -487,7 +490,9 @@ impl Application for App {
                                         }
                                         // 3. Check CHI (Only from Kamicha/Left)
                                         // discarder_idx == 3 means Left relative to P0
-                                        if discarder_idx == 3 && !state.check_chii(0, &self.sutehai).is_empty() {
+                                        if discarder_idx == 3
+                                            && !state.check_chii(0, &self.sutehai).is_empty()
+                                        {
                                             self.can_chi_flag = true;
                                         }
 
@@ -514,10 +519,8 @@ impl Application for App {
                                         && next_teban - 1 < self.ai_instances.len()
                                     {
                                         let ai = self.ai_instances[next_teban - 1].clone();
-                                        let tsumohai_num: usize = state.players[next_teban]
-                                            .tsumohai
-                                            .pai_num
-                                            .into();
+                                        let tsumohai_num: usize =
+                                            state.players[next_teban].tsumohai.pai_num.into();
                                         return Command::perform(
                                             ai.ai_next(tsumohai_num),
                                             Message::AICommand,

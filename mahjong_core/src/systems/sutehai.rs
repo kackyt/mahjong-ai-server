@@ -1,8 +1,8 @@
 use crate::components::world::MahjongWorld;
+use crate::components::{DiscardPile, Hand, RiichiStatus};
 use crate::mahjong_generated::open_mahjong::PaiT;
 use crate::play_log::PlayLog;
-use crate::components::{Hand, DiscardPile, RiichiStatus};
-use anyhow::{Result, ensure};
+use anyhow::{ensure, Context, Result};
 
 pub fn run_sutehai(
     world: &mut MahjongWorld,
@@ -13,11 +13,18 @@ pub fn run_sutehai(
     let teban = world.context.teban as usize;
     let kyoku_id = world.context.kyoku_id;
     let seq = world.context.seq;
-    
-    let entity = world.query_player(teban).unwrap();
-    let mut q = world.world.query_one::<(&mut Hand, &mut DiscardPile, &mut RiichiStatus)>(entity).unwrap();
-    let (hand, discard_pile, riichi_status) = q.get().unwrap();
-    
+
+    let entity = world
+        .query_player(teban)
+        .context("手番プレイヤーの Entity が見つかりません")?;
+    let mut q = world
+        .world
+        .query_one::<(&mut Hand, &mut DiscardPile, &mut RiichiStatus)>(entity)
+        .context("手番プレイヤーのコンポーネント取得に失敗しました")?;
+    let (hand, discard_pile, riichi_status) = q
+        .get()
+        .context("手番プレイヤーのコンポーネントが不完全です")?;
+
     let tehai_len = hand.tiles.len();
     let is_tsumogiri = index >= tehai_len;
 
@@ -67,9 +74,9 @@ pub fn run_sutehai(
     );
 
     world.context.seq += 1;
-    
+
     // Turn cycling
     world.context.teban = (world.context.teban + 1) % world.players.len() as u32;
-    
+
     Ok(kawahai)
 }

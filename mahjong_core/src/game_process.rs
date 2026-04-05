@@ -232,6 +232,7 @@ impl GameStateT {
     }
 
     /// ツモを行います。
+    #[cfg(feature = "ecs")]
     pub fn tsumo(&mut self, play_log: &mut PlayLog) -> anyhow::Result<()> {
         let mut world = crate::components::world::MahjongWorld::from_game_state(self);
         crate::systems::tsumo::run_tsumo(&mut world, play_log)?;
@@ -240,6 +241,7 @@ impl GameStateT {
     }
 
     /// 牌を捨てます。立直判定や一発の解除、河への追加を行います。
+    #[cfg(feature = "ecs")]
     pub fn sutehai(
         &mut self,
         play_log: &mut PlayLog,
@@ -250,9 +252,15 @@ impl GameStateT {
         if is_riichi {
             let player = &self.players[self.teban as usize];
             ensure!(player.mentsu_len == 0, "面前ではありません");
-            
+            ensure!(player.is_tsumo, "ツモしていません");
+
             // Riichi eligibility check (shanten)
-            let mut tehai_check: Vec<PaiT> = player.tehai.iter().take(player.tehai_len as usize).cloned().collect();
+            let mut tehai_check: Vec<PaiT> = player
+                .tehai
+                .iter()
+                .take(player.tehai_len as usize)
+                .cloned()
+                .collect();
             if index < player.tehai_len as usize {
                 tehai_check.remove(index);
                 tehai_check.push(player.tsumohai.clone());

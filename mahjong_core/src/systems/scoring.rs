@@ -1,5 +1,5 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 pub fn calculate_score() -> Result<()> {
-    Ok(())
+    bail!("calculate_score is not implemented yet")
 }

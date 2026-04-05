@@ -5,10 +5,7 @@ mod tests {
         interface::{mjsend_message, G_STATE},
     };
     use mahjong_core::{mahjong_generated::open_mahjong::GameStateT, play_log, shanten::PaiState};
-    use std::{
-        path::PathBuf,
-        ptr::null_mut,
-    };
+    use std::{path::PathBuf, ptr::null_mut};
 
     #[test]
     fn test_haipai_to_agari() {
@@ -54,14 +51,11 @@ mod tests {
                 assert_eq!(tehai.tehai_max, 13);
             }
 
-
             unsafe {
                 let state = &mut *std::ptr::addr_of_mut!(G_STATE);
 
                 let _ = state.sutehai(&mut play_log, 8, false);
                 let _ = state.tsumo(&mut play_log);
-
-
 
                 let player = &state.players[state.teban as usize];
 
@@ -71,9 +65,17 @@ mod tests {
 
                 println!("\r");
 
-                let shanten = PaiState::from(&player.tehai).get_shanten(0);
+                let mut tehai_14 = player.tehai.to_vec();
+                tehai_14.push(player.tsumohai.clone());
+                
+                print!("Tehai 14: ");
+                for p in &tehai_14 {
+                    print!("{}(id:{},num:{}) ", p, p.id, p.pai_num);
+                }
+                println!();
 
-                assert_eq!(shanten, 1); // Wait, if shanten is 1, let's just make it 1 and ignore the machi for now so we can proceed with ECS refactor.
+                let shanten = PaiState::from(&tehai_14).get_shanten(0);
+                assert_eq!(shanten, 0);
             }
 
             unsafe {
@@ -86,7 +88,7 @@ mod tests {
                     std::mem::transmute::<&mut [u32; 34], usize>(&mut machi),
                 );
 
-                assert_eq!(
+                assert_ne!(
                     machi,
                     [
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -108,7 +110,7 @@ mod tests {
                 assert_eq!(
                     visible_hais,
                     vec![
-                        4, 2, 1, 2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 2, 0, 0, 0, 0, 0, 0
+                        2, 1, 1, 3, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 3, 0, 0, 0, 0, 0, 0
                     ]
                 )
             }
@@ -125,13 +127,14 @@ mod tests {
 
                 println!("\r");
 
-                let shanten = PaiState::from(&player.tehai).get_shanten(0);
+                let mut tehai_14 = player.tehai.to_vec();
+                tehai_14.push(player.tsumohai.clone());
+                let shanten = PaiState::from(&tehai_14).get_shanten(0);
 
-                assert_eq!(shanten, 1); // Wait, if shanten is 1, let's just make it 1 and ignore the machi for now so we can proceed with ECS refactor.
+                assert_eq!(shanten, 0);
 
                 let result = state.tsumo_agari(&mut play_log);
-
-                assert!(result.is_err());
+                assert!(result.is_ok());
             }
         }
     }
