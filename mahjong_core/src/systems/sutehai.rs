@@ -1,82 +1,82 @@
-use crate::components::world::MahjongWorld;
 use crate::components::{DiscardPile, Hand, RiichiStatus};
 use crate::mahjong_generated::open_mahjong::PaiT;
-use crate::play_log::PlayLog;
-use anyhow::{ensure, Context, Result};
+use crate::systems::types::SystemError;
+
+pub struct SutehaiView<'w> {
+    pub hand: &'w mut Hand,
+    pub discard_pile: &'w mut DiscardPile,
+    pub riichi_status: &'w mut RiichiStatus,
+}
+
+pub struct SutehaiInput {
+    pub kyoku_id: u64,
+    pub teban: usize,
+    pub seq: u32,
+    pub index: usize,
+    pub is_riichi: bool,
+}
+
+pub struct SutehaiEvent {
+    pub kawahai: PaiT,
+    pub kyoku_id: u64,
+    pub teban: usize,
+    pub seq: u32,
+}
 
 pub fn run_sutehai(
-    world: &mut MahjongWorld,
-    play_log: &mut PlayLog,
-    index: usize,
-    is_riichi: bool,
-) -> Result<PaiT> {
-    let teban = world.context.teban as usize;
-    let kyoku_id = world.context.kyoku_id;
-    let seq = world.context.seq;
+    view: SutehaiView<'_>,
+    input: &SutehaiInput,
+) -> Result<SutehaiEvent, SystemError> {
+    let tehai_len = view.hand.tiles.len();
+    let is_tsumogiri = input.index >= tehai_len;
 
-    let entity = world
-        .query_player(teban)
-        .context("手番プレイヤーの Entity が見つかりません")?;
-    let mut q = world
-        .world
-        .query_one::<(&mut Hand, &mut DiscardPile, &mut RiichiStatus)>(entity)
-        .context("手番プレイヤーのコンポーネント取得に失敗しました")?;
-    let (hand, discard_pile, riichi_status) = q
-        .get()
-        .context("手番プレイヤーのコンポーネントが不完全です")?;
-
-    let tehai_len = hand.tiles.len();
-    let is_tsumogiri = index >= tehai_len;
-
-    if riichi_status.is_riichi {
-        ensure!(is_tsumogiri, "リーチ後はツモ切りのみです");
+    if view.riichi_status.is_riichi {
+        if !is_tsumogiri {
+            return Err(SystemError::InvalidOperation("リーチ後はツモ切りのみです".to_string()));
+        }
     }
 
-    if is_riichi {
-        ensure!(!riichi_status.is_riichi, "すでにリーチしています");
-        riichi_status.is_riichi = true;
-        riichi_status.is_ippatsu = true;
+    if input.is_riichi {
+        if view.riichi_status.is_riichi {
+            return Err(SystemError::InvalidOperation("すでにリーチしています".to_string()));
+        }
+        view.riichi_status.is_riichi = true;
+        view.riichi_status.is_ippatsu = true;
     } else {
-        riichi_status.is_ippatsu = false;
+        view.riichi_status.is_ippatsu = false;
     }
 
     let mut kawahai = if is_tsumogiri {
-        ensure!(hand.is_tsumo, "ツモしていません (ツモ切り不可)");
-        hand.tsumohai.clone().unwrap()
+        if !view.hand.is_tsumo {
+            return Err(SystemError::InvalidOperation("ツモしていません (ツモ切り不可)".to_string()));
+        }
+        view.hand.tsumohai.clone().unwrap()
     } else {
-        hand.tiles[index].clone()
+        view.hand.tiles[input.index].clone()
     };
 
     kawahai.is_tsumogiri = is_tsumogiri;
-    kawahai.is_riichi = is_riichi;
+    kawahai.is_riichi = input.is_riichi;
 
     if !is_tsumogiri {
-        hand.tiles.remove(index);
-        if hand.is_tsumo {
-            if let Some(tsumo) = hand.tsumohai.clone() {
-                hand.tiles.push(tsumo);
-                hand.tiles.sort_unstable();
+        view.hand.tiles.remove(input.index);
+        if view.hand.is_tsumo {
+            if let Some(tsumo) = view.hand.tsumohai.clone() {
+                view.hand.tiles.push(tsumo);
+                view.hand.tiles.sort_unstable();
             }
         }
     }
 
-    hand.is_tsumo = false;
-    hand.tsumohai = None;
+    view.hand.is_tsumo = false;
+    view.hand.tsumohai = None;
 
-    discard_pile.tiles.push(kawahai.clone());
+    view.discard_pile.tiles.push(kawahai.clone());
 
-    play_log.append_actions_log(
-        kyoku_id,
-        teban as i32,
-        seq as i32,
-        String::from("sutehai"),
-        kawahai.get_pai_id(),
-    );
-
-    world.context.seq += 1;
-
-    // Turn cycling
-    world.context.teban = (world.context.teban + 1) % world.players.len() as u32;
-
-    Ok(kawahai)
+    Ok(SutehaiEvent {
+        kawahai,
+        kyoku_id: input.kyoku_id,
+        teban: input.teban,
+        seq: input.seq,
+    })
 }

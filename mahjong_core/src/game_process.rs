@@ -8,7 +8,7 @@ use crate::{
     play_log::PlayLog,
     shanten::{all_of_chiitoitsu, all_of_mentsu, PaiState},
 };
-use anyhow::{bail, ensure};
+use anyhow::{bail, ensure, Context};
 use chrono::Utc;
 use itertools::Itertools;
 use rand::seq::SliceRandom;
@@ -235,7 +235,41 @@ impl GameStateT {
     #[cfg(feature = "ecs")]
     pub fn tsumo(&mut self, play_log: &mut PlayLog) -> anyhow::Result<()> {
         let mut world = crate::components::world::MahjongWorld::from_game_state(self);
-        crate::systems::tsumo::run_tsumo(&mut world, play_log)?;
+        
+        let teban = self.teban as usize;
+        let taku_cursol = self.taku_cursol as usize;
+        let tsumohai = self.taku.get(taku_cursol)?;
+
+        let tsumo_input = crate::systems::tsumo::TsumoInput {
+            teban,
+            seq: self.seq,
+            kyoku_id: self.kyoku_id,
+            is_non_duplicate: self.is_non_duplicate,
+            taku_cursol,
+            tsumohai: tsumohai.clone(),
+        };
+
+        let entity = world.query_player(teban).context("Player not found")?;
+        let mut q = world.world.query_one::<(&mut crate::components::Hand, &mut crate::components::Cursol)>(entity)?;
+        let (hand, cursol) = q.get().context("Components not found")?;
+
+        let view = crate::systems::tsumo::TsumoView { hand, cursol };
+        let event = crate::systems::tsumo::run_tsumo(view, &tsumo_input)
+            .map_err(|e| anyhow::anyhow!("System Error: {}", e))?;
+
+        play_log.append_actions_log(
+            event.kyoku_id,
+            event.teban as i32,
+            event.seq as i32,
+            String::from("tsumo"),
+            event.tsumohai.get_pai_id(),
+        );
+
+        world.context.seq += 1;
+        if world.context.is_non_duplicate {
+            world.context.taku_cursol += 1;
+        }
+
         world.to_game_state(self);
         Ok(())
     }
@@ -272,10 +306,38 @@ impl GameStateT {
         }
 
         let mut world = crate::components::world::MahjongWorld::from_game_state(self);
-        let kawahai = crate::systems::sutehai::run_sutehai(&mut world, play_log, index, is_riichi)?;
+        
+        let teban = self.teban as usize;
+        let sutehai_input = crate::systems::sutehai::SutehaiInput {
+            kyoku_id: self.kyoku_id,
+            teban,
+            seq: self.seq,
+            index,
+            is_riichi,
+        };
+
+        let entity = world.query_player(teban).context("Player not found")?;
+        let mut q = world.world.query_one::<(&mut crate::components::Hand, &mut crate::components::DiscardPile, &mut crate::components::RiichiStatus)>(entity)?;
+        let (hand, discard_pile, riichi_status) = q.get().context("Components not found")?;
+
+        let view = crate::systems::sutehai::SutehaiView { hand, discard_pile, riichi_status };
+        let event = crate::systems::sutehai::run_sutehai(view, &sutehai_input)
+            .map_err(|e| anyhow::anyhow!("System Error: {}", e))?;
+
+        play_log.append_actions_log(
+            event.kyoku_id,
+            event.teban as i32,
+            event.seq as i32,
+            String::from("sutehai"),
+            event.kawahai.get_pai_id(),
+        );
+
+        world.context.seq += 1;
+        world.context.teban = (world.context.teban + 1) % world.players.len() as u32;
+
         world.to_game_state(self);
 
-        Ok(kawahai)
+        Ok(event.kawahai)
     }
 
     /// ツモ和了の処理を行います。点数計算、スコア移動を適用し、結果を返します。

@@ -1,57 +1,43 @@
-use crate::components::world::MahjongWorld;
-#[allow(unused_imports)]
-use crate::mahjong_generated::open_mahjong::GameStateT;
-use crate::play_log::PlayLog;
-use anyhow::{ensure, Context, Result};
-
 use crate::components::{Cursol, Hand};
-use crate::fbs_utils::TakuControl;
+use crate::systems::types::SystemError;
 
-pub fn run_tsumo(world: &mut MahjongWorld, play_log: &mut PlayLog) -> Result<()> {
-    let teban = world.context.teban as usize;
-    let seq = world.context.seq;
-    let kyoku_id = world.context.kyoku_id;
-    let is_non_duplicate = world.context.is_non_duplicate;
+pub struct TsumoView<'w> {
+    pub hand: &'w mut Hand,
+    pub cursol: &'w mut Cursol,
+}
 
-    let entity = world
-        .query_player(teban)
-        .context("手番プレイヤーの Entity が見つかりません")?;
-    let mut q = world
-        .world
-        .query_one::<(&mut Hand, &mut Cursol)>(entity)
-        .context("手番プレイヤーのコンポーネント取得に失敗しました")?;
-    let (hand, cursol_comp) = q
-        .get()
-        .context("手番プレイヤーのコンポーネントが不完全です")?;
+pub struct TsumoInput {
+    pub teban: usize,
+    pub seq: u32,
+    pub kyoku_id: u64,
+    pub is_non_duplicate: bool,
+    pub taku_cursol: usize,
+    pub tsumohai: crate::mahjong_generated::open_mahjong::PaiT,
+}
 
-    ensure!(!hand.is_tsumo, "すでにツモしています");
-    hand.is_tsumo = true;
+pub struct TsumoEvent {
+    pub tsumohai: crate::mahjong_generated::open_mahjong::PaiT,
+    pub kyoku_id: u64,
+    pub teban: usize,
+    pub seq: u32,
+}
 
-    let cursol_val = if is_non_duplicate {
-        world.context.taku_cursol as usize
-    } else {
-        cursol_comp.cursol as usize
-    };
+pub fn run_tsumo(view: TsumoView<'_>, input: &TsumoInput) -> Result<TsumoEvent, SystemError> {
+    if view.hand.is_tsumo {
+        return Err(SystemError::InvalidOperation("すでにツモしています".to_string()));
+    }
+    view.hand.is_tsumo = true;
 
-    let tsumohai = world.context.taku.get(cursol_val)?;
-    hand.tsumohai = Some(tsumohai.clone());
+    view.hand.tsumohai = Some(input.tsumohai.clone());
 
-    play_log.append_actions_log(
-        kyoku_id,
-        teban as i32,
-        seq as i32,
-        String::from("tsumo"),
-        tsumohai.get_pai_id(),
-    );
-
-    world.context.seq += 1;
-
-    // Equivalent to self.next_cursol() logic
-    if is_non_duplicate {
-        world.context.taku_cursol += 1;
-    } else {
-        cursol_comp.cursol += 1;
+    if !input.is_non_duplicate {
+        view.cursol.cursol += 1;
     }
 
-    Ok(())
+    Ok(TsumoEvent {
+        tsumohai: input.tsumohai.clone(),
+        kyoku_id: input.kyoku_id,
+        teban: input.teban,
+        seq: input.seq,
+    })
 }

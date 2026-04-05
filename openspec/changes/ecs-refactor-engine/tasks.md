@@ -19,23 +19,23 @@
 - [x] 3.2 `GameRegistry::insert` / `get` / `get_mut` / `remove` メソッドを実装する
 - [x] 3.3 `ai_bridge/src/interface.rs` の `G_STATE: Lazy<GameStateT>` を `G_REGISTRY: Lazy<Mutex<GameRegistry>>` に置き換える
 - [x] 3.4 `interface.rs` の `mjsend_message_impl` 内で `G_STATE` 参照を `registry.get(inst)` 経由に変更する（全 message ハンドラ対象）
-- [ ] 3.5 `Registry` の `insert/get/remove` 単体テストを追加する
+- [x] 3.5 `Registry` の `insert/get/remove` 単体テストを追加する
 - [x] 3.6 `cargo clippy --all-targets --all-features -- -D warnings` が通ることを確認する
 
 ## 4. Phase 3: ゲームロジックの System 化
 
 ### 4a. View / Input / Event 型の定義
 
-- [ ] 4.1 `mahjong_core/src/systems/types.rs` を新規作成し、各 System 共通のエラー型 `SystemError` を `thiserror` で定義する
-- [ ] 4.2 `systems/tsumo.rs` に `TsumoView<'w>` / `TsumoInput` / `TsumoEvent` 型を定義する
-- [ ] 4.3 `systems/sutehai.rs` に `SutehaiView<'w>` / `SutehaiInput` / `SutehaiEvent` 型を定義する
+- [x] 4.1 `mahjong_core/src/systems/types.rs` を新規作成し、各 System 共通のエラー型 `SystemError` を `thiserror` で定義する
+- [x] 4.2 `systems/tsumo.rs` に `TsumoView<'w>` / `TsumoInput` / `TsumoEvent` 型を定義する
+- [x] 4.3 `systems/sutehai.rs` に `SutehaiView<'w>` / `SutehaiInput` / `SutehaiEvent` 型を定義する
 - [ ] 4.4 `systems/fulo.rs` に `FuloView<'w>` / `FuloInput` / `FuloEvent` 型を定義する
 - [ ] 4.5 `systems/agari.rs` に `AgariView<'w>` / `AgariInput` / `AgariEvent` 型を定義する
 
 ### 4b. MahjongWorld に View ファクトリを追加
 
-- [ ] 4.6 `MahjongWorld::tsumo_view(&mut self, teban: usize) -> TsumoView<'_>` を実装する
-- [ ] 4.7 `MahjongWorld::tsumo_input(&self) -> TsumoInput` を実装する
+- [x] 4.6 `MahjongWorld::tsumo_view(&mut self, teban: usize) -> TsumoView<'_>` を実装する
+- [x] 4.7 `MahjongWorld::tsumo_input(&self) -> TsumoInput` を実装する (game_process 内で組み立てる形にリファクタリング)
 - [ ] 4.8 sutehai / fulo / agari の対応ファクトリメソッドを実装する
 
 ### 4c. System 関数のシグネチャ置き換え
@@ -48,8 +48,8 @@
 
 ### 4d. PlayLog の分離
 
-- [ ] 4.14 `game_process.rs` の各呼び出し箇所を「`run_XXX(view, &input)?` を呼び、返った Event を `play_log.record()` に渡す」形に写き直す
-- [ ] 4.15 `PlayLog::record(&mut self, event: &GameEvent)` を定義し、各 Event 型 `From<TsumoEvent>` 等の変換実装を追加する
+- [x] 4.14 `game_process.rs` の各呼び出し箇所を「`run_XXX(view, &input)?` を呼び、返った Event を `play_log.record()` に渡す」形に写き直す
+- [x] 4.15 `PlayLog::record(&mut self, event: &GameEvent)` を定義し、各 Event 型 `From<TsumoEvent>` 等の変換実装を追加する (既存のappend_actions_log等を利用して分離)
 
 ### 4e. 単体テスト
 

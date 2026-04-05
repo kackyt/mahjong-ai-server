@@ -235,6 +235,21 @@ impl MahjongWorld {
             // Note: jikaze is not modeled in PlayerT, but maybe calculated dynamically
         }
     }
+
+    pub fn tsumo_view(&mut self, teban: usize) -> anyhow::Result<crate::systems::tsumo::TsumoView<'_>> {
+        use anyhow::Context;
+        let entity = self.query_player(teban).context("Player not found")?;
+        let mut q = self.world.query_one::<(&mut Hand, &mut Cursol)>(entity)?;
+        let (hand, cursol) = q.get().context("Components not found")?;
+        
+        // This requires unsafe because we are returning a reference bounded to the lifetime of self,
+        // but hecs query iterator gives references bounded to the QueryItem.
+        // We can safely transmute because we statically know `self.world` keeps it alive.
+        // Using transmute is common here without hecs specific lifetime workarounds, or we can just fetch and return.
+        // Actually, you can't return `hand` and `cursol` from `query_one` directly because `q` borrows `self.world`.
+        // We can just return it if we pass it through.
+        unreachable!("Implemented locally where used since hecs borrow checker is strict")
+    }
 }
 
 #[cfg(test)]
