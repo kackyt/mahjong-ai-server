@@ -24,13 +24,15 @@ pub struct TsumoEvent {
 
 pub fn run_tsumo(view: TsumoView<'_>, input: &TsumoInput) -> Result<TsumoEvent, SystemError> {
     if view.hand.is_tsumo {
-        return Err(SystemError::InvalidOperation("すでにツモしています".to_string()));
+        return Err(SystemError::InvalidOperation(
+            "すでにツモしています".to_string(),
+        ));
     }
     view.hand.is_tsumo = true;
 
     view.hand.tsumohai = Some(input.tsumohai.clone());
 
-    if !input.is_non_duplicate {
+    if input.is_non_duplicate {
         view.cursol.cursol += 1;
     }
 

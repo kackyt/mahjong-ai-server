@@ -32,13 +32,17 @@ pub fn run_sutehai(
 
     if view.riichi_status.is_riichi {
         if !is_tsumogiri {
-            return Err(SystemError::InvalidOperation("リーチ後はツモ切りのみです".to_string()));
+            return Err(SystemError::InvalidOperation(
+                "リーチ後はツモ切りのみです".to_string(),
+            ));
         }
     }
 
     if input.is_riichi {
         if view.riichi_status.is_riichi {
-            return Err(SystemError::InvalidOperation("すでにリーチしています".to_string()));
+            return Err(SystemError::InvalidOperation(
+                "すでにリーチしています".to_string(),
+            ));
         }
         view.riichi_status.is_riichi = true;
         view.riichi_status.is_ippatsu = true;
@@ -48,7 +52,9 @@ pub fn run_sutehai(
 
     let mut kawahai = if is_tsumogiri {
         if !view.hand.is_tsumo {
-            return Err(SystemError::InvalidOperation("ツモしていません (ツモ切り不可)".to_string()));
+            return Err(SystemError::InvalidOperation(
+                "ツモしていません (ツモ切り不可)".to_string(),
+            ));
         }
         view.hand.tsumohai.clone().unwrap()
     } else {
@@ -63,7 +69,9 @@ pub fn run_sutehai(
         if view.hand.is_tsumo {
             if let Some(tsumo) = view.hand.tsumohai.clone() {
                 view.hand.tiles.push(tsumo);
-                view.hand.tiles.sort_unstable();
+                view.hand
+                    .tiles
+                    .sort_unstable_by(|a, b| a.pai_num.cmp(&b.pai_num).then(a.id.cmp(&b.id)));
             }
         }
     }

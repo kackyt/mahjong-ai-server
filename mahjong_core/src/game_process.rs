@@ -235,9 +235,13 @@ impl GameStateT {
     #[cfg(feature = "ecs")]
     pub fn tsumo(&mut self, play_log: &mut PlayLog) -> anyhow::Result<()> {
         let mut world = crate::components::world::MahjongWorld::from_game_state(self);
-        
+
         let teban = self.teban as usize;
-        let taku_cursol = self.taku_cursol as usize;
+        let taku_cursol = if self.is_non_duplicate {
+            self.taku_cursol as usize
+        } else {
+            self.players[teban].cursol as usize
+        };
         let tsumohai = self.taku.get(taku_cursol)?;
 
         let tsumo_input = crate::systems::tsumo::TsumoInput {
@@ -250,12 +254,19 @@ impl GameStateT {
         };
 
         let entity = world.query_player(teban).context("Player not found")?;
-        let mut q = world.world.query_one::<(&mut crate::components::Hand, &mut crate::components::Cursol)>(entity)?;
-        let (hand, cursol) = q.get().context("Components not found")?;
+        let event = {
+            let mut q = world
+                .world
+                .query_one::<(&mut crate::components::Hand, &mut crate::components::Cursol)>(
+                    entity,
+                )?;
+            let (hand, cursol) = q.get().context("Components not found")?;
 
-        let view = crate::systems::tsumo::TsumoView { hand, cursol };
-        let event = crate::systems::tsumo::run_tsumo(view, &tsumo_input)
-            .map_err(|e| anyhow::anyhow!("System Error: {}", e))?;
+            let view = crate::systems::tsumo::TsumoView { hand, cursol };
+            let event = crate::systems::tsumo::run_tsumo(view, &tsumo_input)
+                .map_err(|e| anyhow::anyhow!("System Error: {}", e))?;
+            event
+        };
 
         play_log.append_actions_log(
             event.kyoku_id,
@@ -266,11 +277,9 @@ impl GameStateT {
         );
 
         world.context.seq += 1;
-        if world.context.is_non_duplicate {
-            world.context.taku_cursol += 1;
-        }
 
         world.to_game_state(self);
+        self.next_cursol();
         Ok(())
     }
 
@@ -306,7 +315,7 @@ impl GameStateT {
         }
 
         let mut world = crate::components::world::MahjongWorld::from_game_state(self);
-        
+
         let teban = self.teban as usize;
         let sutehai_input = crate::systems::sutehai::SutehaiInput {
             kyoku_id: self.kyoku_id,
@@ -317,12 +326,23 @@ impl GameStateT {
         };
 
         let entity = world.query_player(teban).context("Player not found")?;
-        let mut q = world.world.query_one::<(&mut crate::components::Hand, &mut crate::components::DiscardPile, &mut crate::components::RiichiStatus)>(entity)?;
-        let (hand, discard_pile, riichi_status) = q.get().context("Components not found")?;
+        let event = {
+            let mut q = world.world.query_one::<(
+                &mut crate::components::Hand,
+                &mut crate::components::DiscardPile,
+                &mut crate::components::RiichiStatus,
+            )>(entity)?;
+            let (hand, discard_pile, riichi_status) = q.get().context("Components not found")?;
 
-        let view = crate::systems::sutehai::SutehaiView { hand, discard_pile, riichi_status };
-        let event = crate::systems::sutehai::run_sutehai(view, &sutehai_input)
-            .map_err(|e| anyhow::anyhow!("System Error: {}", e))?;
+            let view = crate::systems::sutehai::SutehaiView {
+                hand,
+                discard_pile,
+                riichi_status,
+            };
+            let event = crate::systems::sutehai::run_sutehai(view, &sutehai_input)
+                .map_err(|e| anyhow::anyhow!("System Error: {}", e))?;
+            event
+        };
 
         play_log.append_actions_log(
             event.kyoku_id,

@@ -110,7 +110,8 @@ mod tests {
                 assert_eq!(
                     visible_hais,
                     vec![
-                        2, 1, 1, 3, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 3, 0, 0, 0, 0, 0, 0
+                        2, 1, 1, 3, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+                        2, 1, 3, 0, 0, 0, 0, 0, 0
                     ]
                 )
             }
@@ -131,8 +132,9 @@ mod tests {
                 tehai_14.push(player.tsumohai.clone());
                 let shanten = PaiState::from(&tehai_14).get_shanten(0);
 
-                assert_eq!(shanten, 0);
+                assert_eq!(shanten, -1);
 
+                // Wait, it expects tsumo_agari to succeed!
                 let result = state.tsumo_agari(&mut play_log);
                 assert!(result.is_ok());
             }

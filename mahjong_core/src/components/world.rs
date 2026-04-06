@@ -236,12 +236,15 @@ impl MahjongWorld {
         }
     }
 
-    pub fn tsumo_view(&mut self, teban: usize) -> anyhow::Result<crate::systems::tsumo::TsumoView<'_>> {
+    pub fn tsumo_view(
+        &mut self,
+        teban: usize,
+    ) -> anyhow::Result<crate::systems::tsumo::TsumoView<'_>> {
         use anyhow::Context;
         let entity = self.query_player(teban).context("Player not found")?;
         let mut q = self.world.query_one::<(&mut Hand, &mut Cursol)>(entity)?;
         let (hand, cursol) = q.get().context("Components not found")?;
-        
+
         // This requires unsafe because we are returning a reference bounded to the lifetime of self,
         // but hecs query iterator gives references bounded to the QueryItem.
         // We can safely transmute because we statically know `self.world` keeps it alive.

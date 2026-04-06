@@ -254,7 +254,10 @@ unsafe fn mjsend_message_impl(
                 } else {
                     pstate.hai_count_m[i] += 1;
                 }
-                let all_mentsu = all_of_mentsu(pstate, v_fulo.len());
+                let mut all_mentsu = all_of_mentsu(pstate, v_fulo.len());
+                if v_fulo.is_empty() {
+                    all_mentsu.extend(mahjong_core::shanten::all_of_chiitoitsu(pstate));
+                }
                 if i >= 27 {
                     pstate.hai_count_z[i - 27] -= 1;
                 } else if i >= 18 {
