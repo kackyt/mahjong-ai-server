@@ -1,32 +1,75 @@
-use super::{Cursol, DiscardPile, Fulo, Hand, PlayerInfo, RiichiStatus, Score, Wind};
+use super::{
+    BakazeIndex, Cursol, CursolPos, DiscardPile, DoraLen, Fulo, Hand, KyokuId, OyaIndex, PlayerInfo,
+    RiichiStatus, RiichibouCount, Score, ScorePoint, SeqCount, TakuCursolPos, TsumobouCount, Wind,
+    WindIndex,
+};
 use crate::mahjong_generated::open_mahjong::{GameStateT, RuleT, TakuT};
 use hecs::{Entity, World};
+use thiserror::Error;
 
-pub struct GameContext {
-    pub title: String,
-    pub game_id: Vec<u8>,
-    pub kyoku_id: u64,
-    pub bakaze: u32,
-    pub oya: u32,
-    pub tsumobou: u32,
-    pub riichibou: u32,
-    pub teban: u32,
-    pub seq: u32,
-    pub dora_len: u32,
-    pub uradora_len: u32,
-    pub is_non_duplicate: bool,
-    pub rule: RuleT,
-    pub taku: TakuT,
-    pub taku_cursol: u32,
+/// ドメイン層のWorldに関連するエラー定義
+#[derive(Error, Debug)]
+pub enum WorldError {
+    /// 指定された手番のプレイヤーが見つからない
+    #[error("Player not found for teban: {0}")]
+    PlayerNotFound(usize),
+    /// コンポーネントが見つからない
+    #[error("Components not found for player")]
+    ComponentsNotFound,
+    /// hecsのクエリエラー
+    #[error("HECS query error: {0}")]
+    HecsError(#[from] hecs::ComponentError),
+    /// 特定のエンティティ操作におけるエラー
+    #[error("Entity error: {0}")]
+    EntityError(#[from] hecs::NoSuchEntity),
 }
 
+/// ゲーム全体のコンテキスト情報を保持する構造体
+pub struct GameContext {
+    /// ゲームのタイトル
+    pub title: String,
+    /// ゲームのユニークID
+    pub game_id: Vec<u8>,
+    /// 局をまたいで一意なID
+    pub kyoku_id: KyokuId,
+    /// 場風 (東, 南, 西, 北)
+    pub bakaze: BakazeIndex,
+    /// 親のプレイヤーインデックス
+    pub oya: OyaIndex,
+    /// 積み棒の数
+    pub tsumobou: TsumobouCount,
+    /// 立直棒の数
+    pub riichibou: RiichibouCount,
+    /// 現在の手番プレイヤーインデックス
+    pub teban: u32,
+    /// ログやイベントのシーケンス番号
+    pub seq: SeqCount,
+    /// ドラの数
+    pub dora_len: DoraLen,
+    /// 裏ドラの数
+    pub uradora_len: DoraLen,
+    /// 牌の重複を許さないかの設定
+    pub is_non_duplicate: bool,
+    /// ゲームルール設定
+    pub rule: RuleT,
+    /// 卓上の牌（山）の状態
+    pub taku: TakuT,
+    /// 卓上のカーソル位置
+    pub taku_cursol: TakuCursolPos,
+}
+
+/// 麻雀のゲーム状態を管理するメインの世界（ECSのWorldを保持）
 pub struct MahjongWorld {
+    /// hecsによるEntity情報管理
     pub world: World,
+    /// プレイヤーエンティティのリスト
     pub players: Vec<Entity>,
+    /// ゲーム全体で共有されるコンテキスト
     pub context: GameContext,
 }
 
 impl MahjongWorld {
+    /// 指定されたプレイヤー人数で新しい世界を作成します
     pub fn new(player_len: usize) -> Self {
         let mut world = World::new();
         let mut players = Vec::new();
@@ -40,8 +83,12 @@ impl MahjongWorld {
                 },
                 DiscardPile { tiles: Vec::new() },
                 Fulo { mentsu: Vec::new() },
-                Score { score: 25000 },
-                Wind { wind: 0 },
+                Score {
+                    score: ScorePoint(25000),
+                },
+                Wind {
+                    wind: WindIndex(0),
+                },
                 RiichiStatus {
                     is_riichi: false,
                     is_ippatsu: false,
@@ -49,7 +96,9 @@ impl MahjongWorld {
                 PlayerInfo {
                     name: String::new(),
                 },
-                Cursol { cursol: 0 },
+                Cursol {
+                    cursol: CursolPos(0),
+                },
             ));
             players.push(entity);
         }
@@ -60,27 +109,29 @@ impl MahjongWorld {
             context: GameContext {
                 title: String::new(),
                 game_id: Vec::new(),
-                kyoku_id: 0,
-                bakaze: 0,
-                oya: 0,
-                tsumobou: 0,
-                riichibou: 0,
+                kyoku_id: KyokuId(0),
+                bakaze: BakazeIndex(0),
+                oya: OyaIndex(0),
+                tsumobou: TsumobouCount(0),
+                riichibou: RiichibouCount(0),
                 teban: 0,
-                seq: 0,
-                dora_len: 0,
-                uradora_len: 0,
+                seq: SeqCount(0),
+                dora_len: DoraLen(0),
+                uradora_len: DoraLen(0),
                 is_non_duplicate: false,
                 rule: RuleT::default(),
                 taku: TakuT::default(),
-                taku_cursol: 0,
+                taku_cursol: TakuCursolPos(0),
             },
         }
     }
 
+    /// プレイヤーのインデックスからエンティティを取得します
     pub fn query_player(&self, idx: usize) -> Option<Entity> {
         self.players.get(idx).copied()
     }
 
+    /// FlatBuffersのGameStateTからMahjongWorldを再構築します
     pub fn from_game_state(state: &GameStateT) -> Self {
         let mut world = World::new();
         let mut players = Vec::new();
@@ -110,10 +161,10 @@ impl MahjongWorld {
                     mentsu: player_state.mentsu[..player_state.mentsu_len as usize].to_vec(),
                 },
                 Score {
-                    score: player_state.score,
+                    score: ScorePoint(player_state.score),
                 },
                 Wind {
-                    wind: (i as u32 + 4 - state.oya) % 4,
+                    wind: WindIndex((i as u32 + 4 - state.oya) % 4),
                 },
                 RiichiStatus {
                     is_riichi: player_state.is_riichi,
@@ -123,7 +174,7 @@ impl MahjongWorld {
                     name: String::from_utf8_lossy(&player_state.name.pack().0).to_string(),
                 },
                 Cursol {
-                    cursol: player_state.cursol,
+                    cursol: CursolPos(player_state.cursol),
                 },
             ));
             players.push(entity);
@@ -135,41 +186,42 @@ impl MahjongWorld {
             context: GameContext {
                 title: String::from_utf8_lossy(&state.title.pack().0).to_string(),
                 game_id: state.game_id.to_vec(),
-                kyoku_id: state.kyoku_id,
-                bakaze: state.bakaze,
-                oya: state.oya,
-                tsumobou: state.tsumobou,
-                riichibou: state.riichibou,
+                kyoku_id: KyokuId(state.kyoku_id),
+                bakaze: BakazeIndex(state.bakaze),
+                oya: OyaIndex(state.oya),
+                tsumobou: TsumobouCount(state.tsumobou),
+                riichibou: RiichibouCount(state.riichibou),
                 teban: state.teban,
-                seq: state.seq,
-                dora_len: state.dora_len,
-                uradora_len: state.uradora_len,
+                seq: SeqCount(state.seq),
+                dora_len: DoraLen(state.dora_len),
+                uradora_len: DoraLen(state.uradora_len),
                 is_non_duplicate: state.is_non_duplicate,
                 rule: state.rule.clone(),
                 taku: state.taku.clone(),
-                taku_cursol: state.taku_cursol,
+                taku_cursol: TakuCursolPos(state.taku_cursol),
             },
         }
     }
 
+    /// MahjongWorldの状態をFlatBuffersのGameStateTに書き戻します
     pub fn to_game_state(&self, state: &mut GameStateT) {
         state.title = self.context.title.as_bytes().into();
         let game_id_len = self.context.game_id.len().min(state.game_id.len());
         state.game_id.fill(0);
         state.game_id[..game_id_len].copy_from_slice(&self.context.game_id[..game_id_len]);
-        state.kyoku_id = self.context.kyoku_id;
-        state.bakaze = self.context.bakaze;
-        state.oya = self.context.oya;
-        state.tsumobou = self.context.tsumobou;
-        state.riichibou = self.context.riichibou;
+        state.kyoku_id = self.context.kyoku_id.0;
+        state.bakaze = self.context.bakaze.0;
+        state.oya = self.context.oya.0;
+        state.tsumobou = self.context.tsumobou.0;
+        state.riichibou = self.context.riichibou.0;
         state.teban = self.context.teban;
-        state.seq = self.context.seq;
-        state.dora_len = self.context.dora_len;
-        state.uradora_len = self.context.uradora_len;
+        state.seq = self.context.seq.0;
+        state.dora_len = self.context.dora_len.0;
+        state.uradora_len = self.context.uradora_len.0;
         state.is_non_duplicate = self.context.is_non_duplicate;
         state.rule = self.context.rule.clone();
         state.taku = self.context.taku.clone();
-        state.taku_cursol = self.context.taku_cursol;
+        state.taku_cursol = self.context.taku_cursol.0;
         state.player_len = self.players.len() as u32;
 
         for (i, &entity) in self.players.iter().enumerate() {
@@ -209,7 +261,7 @@ impl MahjongWorld {
 
             if let Ok(mut q) = self.world.query_one::<&Score>(entity) {
                 if let Some(score) = q.get() {
-                    player.score = score.score;
+                    player.score = score.score.0;
                 }
             }
 
@@ -228,7 +280,7 @@ impl MahjongWorld {
 
             if let Ok(mut q) = self.world.query_one::<&Cursol>(entity) {
                 if let Some(cursol) = q.get() {
-                    player.cursol = cursol.cursol;
+                    player.cursol = cursol.cursol.0;
                 }
             }
 
@@ -236,22 +288,25 @@ impl MahjongWorld {
         }
     }
 
+    /// ツモ時の手牌とカーソルのビューを取得します
     pub fn tsumo_view(
         &mut self,
         teban: usize,
-    ) -> anyhow::Result<crate::systems::tsumo::TsumoView<'_>> {
-        use anyhow::Context;
-        let entity = self.query_player(teban).context("Player not found")?;
-        let mut q = self.world.query_one::<(&mut Hand, &mut Cursol)>(entity)?;
-        let (hand, cursol) = q.get().context("Components not found")?;
+    ) -> Result<crate::systems::tsumo::TsumoView<'_>, WorldError> {
+        let entity = self
+            .query_player(teban)
+            .ok_or(WorldError::PlayerNotFound(teban))?;
+        let mut q = self
+            .world
+            .query_one::<(&mut Hand, &mut Cursol)>(entity)
+            .map_err(WorldError::EntityError)?;
+        let (_hand, _cursol) = q.get().ok_or(WorldError::ComponentsNotFound)?;
 
-        // This requires unsafe because we are returning a reference bounded to the lifetime of self,
-        // but hecs query iterator gives references bounded to the QueryItem.
-        // We can safely transmute because we statically know `self.world` keeps it alive.
-        // Using transmute is common here without hecs specific lifetime workarounds, or we can just fetch and return.
-        // Actually, you can't return `hand` and `cursol` from `query_one` directly because `q` borrows `self.world`.
-        // We can just return it if we pass it through.
-        unreachable!("Implemented locally where used since hecs borrow checker is strict")
+        // Note: システム側でこのビューを使用して更新を行います。
+        // hecsの借用制約のため、通常はこのメソッド内でクロージャとして実行するか、
+        // もしくはトランスミュート等が必要になることがありますが、
+        // ここでは単純化のためにunreachable!としておき、実際の呼び出し側で直接クエリを行う方針にします。
+        unreachable!("システムの呼び出し側で hecs::World を直接クエリしてください")
     }
 }
 
@@ -268,7 +323,7 @@ mod tests {
         let entity = world.query_player(0).unwrap();
         let mut q = world.world.query_one::<&Score>(entity).unwrap();
         let score = q.get().unwrap();
-        assert_eq!(score.score, 25000);
+        assert_eq!(score.score.0, 25000);
     }
 
     #[test]
@@ -298,11 +353,11 @@ mod tests {
         let entity0 = world.query_player(0).unwrap();
         let mut q0 = world.world.query_one::<&Score>(entity0).unwrap();
         let score0 = q0.get().unwrap();
-        assert_eq!(score0.score, 30000);
+        assert_eq!(score0.score.0, 30000);
 
         let entity1 = world.query_player(1).unwrap();
         let mut q1 = world.world.query_one::<&Score>(entity1).unwrap();
         let score1 = q1.get().unwrap();
-        assert_eq!(score1.score, 20000);
+        assert_eq!(score1.score.0, 20000);
     }
 }

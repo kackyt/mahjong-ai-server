@@ -10,7 +10,6 @@ mod tests {
     use super::*;
     use crate::components::world::MahjongWorld;
     use crate::fbs_utils::TakuControl;
-    use crate::play_log::PlayLog;
 
     #[test]
     fn test_tsumo_to_sutehai() {
@@ -23,7 +22,7 @@ mod tests {
         let is_riichi = false;
         
         let entity = world.query_player(teban).unwrap();
-        let taku_cursol = world.context.taku_cursol as usize;
+        let taku_cursol = world.context.taku_cursol.0 as usize;
         let tsumohai = world.context.taku.get(taku_cursol).unwrap();
 
         {
@@ -39,13 +38,15 @@ mod tests {
                 seq,
                 kyoku_id,
                 is_non_duplicate: world.context.is_non_duplicate,
-                taku_cursol,
+                taku_cursol: crate::components::TakuCursolPos(taku_cursol as u32),
                 tsumohai: tsumohai.clone(),
             };
             let _tsumo_event = tsumo::run_tsumo(tsumo_view, &tsumo_input).unwrap();
         }
 
-        world.context.taku_cursol += 1; // normally done globally
+        world.context.taku_cursol.0 += 1; // normally done globally
+        
+        let seq_next = crate::components::SeqCount(seq.0 + 1);
 
         {
             let mut q_sutehai = world
@@ -66,7 +67,7 @@ mod tests {
             let sutehai_input = sutehai::SutehaiInput {
                 kyoku_id,
                 teban,
-                seq: seq + 1,
+                seq: seq_next,
                 index,
                 is_riichi,
             };

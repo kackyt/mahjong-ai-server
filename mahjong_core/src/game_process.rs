@@ -8,7 +8,7 @@ use crate::{
     play_log::PlayLog,
     shanten::{all_of_chiitoitsu, all_of_mentsu, PaiState},
 };
-use anyhow::{bail, ensure, Context};
+use anyhow::{bail, ensure};
 use chrono::Utc;
 use itertools::Itertools;
 use rand::seq::SliceRandom;
@@ -19,6 +19,22 @@ use uuid::Uuid;
 pub enum GameProcessError {
     #[error("リーチ後はツモ切りのみです")]
     IllegalSutehaiAfterRiichi,
+    /// 面前ではない場合のエラー
+    #[error("面前ではありません")]
+    NotMenzen,
+    /// ツモっていない場合のエラー
+    #[error("ツモしていません")]
+    NotTsumo,
+    /// テンパイではない場合のエラー
+    #[error("テンパイではありません")]
+    NotTenpai,
+    /// ECS世界（MahjongWorld）におけるエラー
+    #[error("World error: {0}")]
+    WorldError(#[from] crate::components::world::WorldError),
+    /// 各システム（ツモ・打牌等）におけるエラー
+    #[error("System error: {0}")]
+    SystemError(#[from] crate::systems::types::SystemError),
+    /// その他のエラー（anyhow等）
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -233,7 +249,7 @@ impl GameStateT {
 
     /// ツモを行います。
     #[cfg(feature = "ecs")]
-    pub fn tsumo(&mut self, play_log: &mut PlayLog) -> anyhow::Result<()> {
+    pub fn tsumo(&mut self, play_log: &mut PlayLog) -> Result<(), GameProcessError> {
         let mut world = crate::components::world::MahjongWorld::from_game_state(self);
 
         let teban = self.teban as usize;
@@ -246,37 +262,42 @@ impl GameStateT {
 
         let tsumo_input = crate::systems::tsumo::TsumoInput {
             teban,
-            seq: self.seq,
-            kyoku_id: self.kyoku_id,
+            seq: crate::components::SeqCount(self.seq),
+            kyoku_id: crate::components::KyokuId(self.kyoku_id),
             is_non_duplicate: self.is_non_duplicate,
-            taku_cursol,
+            taku_cursol: crate::components::TakuCursolPos(taku_cursol as u32),
             tsumohai: tsumohai.clone(),
         };
 
-        let entity = world.query_player(teban).context("Player not found")?;
+        let entity = world
+            .query_player(teban)
+            .ok_or(crate::components::world::WorldError::PlayerNotFound(teban))?;
+
         let event = {
+            // hecsのBorrow制約のため、特定のスコープでクエリを実行する
             let mut q = world
                 .world
                 .query_one::<(&mut crate::components::Hand, &mut crate::components::Cursol)>(
                     entity,
-                )?;
-            let (hand, cursol) = q.get().context("Components not found")?;
+                )
+                .map_err(crate::components::world::WorldError::EntityError)?;
+            let (hand, cursol) = q
+                .get()
+                .ok_or(crate::components::world::WorldError::ComponentsNotFound)?;
 
             let view = crate::systems::tsumo::TsumoView { hand, cursol };
-            let event = crate::systems::tsumo::run_tsumo(view, &tsumo_input)
-                .map_err(|e| anyhow::anyhow!("System Error: {}", e))?;
-            event
+            crate::systems::tsumo::run_tsumo(view, &tsumo_input)?
         };
 
         play_log.append_actions_log(
-            event.kyoku_id,
+            event.kyoku_id.0,
             event.teban as i32,
-            event.seq as i32,
+            event.seq.0 as i32,
             String::from("tsumo"),
             event.tsumohai.get_pai_id(),
         );
 
-        world.context.seq += 1;
+        world.context.seq.0 += 1;
 
         world.to_game_state(self);
         self.next_cursol();
@@ -290,14 +311,18 @@ impl GameStateT {
         play_log: &mut PlayLog,
         index: usize,
         is_riichi: bool,
-    ) -> anyhow::Result<PaiT> {
-        // Validation that still requires non-ECS or legacy structures
+    ) -> Result<PaiT, GameProcessError> {
+        // バリデーション（非ECSのレガシー構造を参照）
         if is_riichi {
             let player = &self.players[self.teban as usize];
-            ensure!(player.mentsu_len == 0, "面前ではありません");
-            ensure!(player.is_tsumo, "ツモしていません");
+            if player.mentsu_len != 0 {
+                return Err(GameProcessError::NotMenzen);
+            }
+            if !player.is_tsumo {
+                return Err(GameProcessError::NotTsumo);
+            }
 
-            // Riichi eligibility check (shanten)
+            // 立直が可能かチェック（シャンテン数）
             let mut tehai_check: Vec<PaiT> = player
                 .tehai
                 .iter()
@@ -311,48 +336,51 @@ impl GameStateT {
             }
             let mut state = PaiState::from(&tehai_check);
             let shanten = state.get_shanten(player.mentsu_len as usize);
-            ensure!(shanten == 0, "テンパイではありません");
+            if shanten != 0 {
+                return Err(GameProcessError::NotTenpai);
+            }
         }
 
         let mut world = crate::components::world::MahjongWorld::from_game_state(self);
 
         let teban = self.teban as usize;
         let sutehai_input = crate::systems::sutehai::SutehaiInput {
-            kyoku_id: self.kyoku_id,
+            kyoku_id: crate::components::KyokuId(self.kyoku_id),
             teban,
-            seq: self.seq,
+            seq: crate::components::SeqCount(self.seq),
             index,
             is_riichi,
         };
 
-        let entity = world.query_player(teban).context("Player not found")?;
+        let entity = world
+            .query_player(teban)
+            .ok_or(crate::components::world::WorldError::PlayerNotFound(teban))?;
+
         let event = {
             let mut q = world.world.query_one::<(
                 &mut crate::components::Hand,
                 &mut crate::components::DiscardPile,
                 &mut crate::components::RiichiStatus,
-            )>(entity)?;
-            let (hand, discard_pile, riichi_status) = q.get().context("Components not found")?;
+            )>(entity).map_err(crate::components::world::WorldError::EntityError)?;
+            let (hand, discard_pile, riichi_status) = q.get().ok_or(crate::components::world::WorldError::ComponentsNotFound)?;
 
             let view = crate::systems::sutehai::SutehaiView {
                 hand,
                 discard_pile,
                 riichi_status,
             };
-            let event = crate::systems::sutehai::run_sutehai(view, &sutehai_input)
-                .map_err(|e| anyhow::anyhow!("System Error: {}", e))?;
-            event
+            crate::systems::sutehai::run_sutehai(view, &sutehai_input)?
         };
 
         play_log.append_actions_log(
-            event.kyoku_id,
+            event.kyoku_id.0,
             event.teban as i32,
-            event.seq as i32,
+            event.seq.0 as i32,
             String::from("sutehai"),
             event.kawahai.get_pai_id(),
         );
 
-        world.context.seq += 1;
+        world.context.seq.0 += 1;
         world.context.teban = (world.context.teban + 1) % world.players.len() as u32;
 
         world.to_game_state(self);
@@ -1239,7 +1267,8 @@ impl GameStateT {
             }
             ActionType::ACTION_SYNC => {
                 if player_index == self.teban as usize {
-                    self.tsumo(play_log)
+                    self.tsumo(play_log)?;
+                    Ok(())
                 } else {
                     Ok(())
                 }
