@@ -364,7 +364,10 @@ unsafe fn mjsend_message_impl(
 
             pstate.append(&agari_pai.unpack());
 
-            let all_mentsu = all_of_mentsu(pstate, v_fulo.len());
+            let mut all_mentsu = all_of_mentsu(pstate, v_fulo.len());
+            if v_fulo.is_empty() {
+                all_mentsu.extend(mahjong_core::shanten::all_of_chiitoitsu(pstate));
+            }
             let all_of_mentsu_with_agari = add_machi_to_mentsu(&all_mentsu, &agari_pai);
 
             let result = taku.get_best_agari(

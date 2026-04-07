@@ -148,17 +148,21 @@ impl MahjongWorld {
                 None
             };
 
+            let tehai_len = (player_state.tehai_len as usize).min(player_state.tehai.len());
+            let kawahai_len = (player_state.kawahai_len as usize).min(player_state.kawahai.len());
+            let mentsu_len = (player_state.mentsu_len as usize).min(player_state.mentsu.len());
+
             let entity = world.spawn((
                 Hand {
-                    tiles: player_state.tehai[..player_state.tehai_len as usize].to_vec(),
+                    tiles: player_state.tehai[..tehai_len].to_vec(),
                     tsumohai,
                     is_tsumo: player_state.is_tsumo,
                 },
                 DiscardPile {
-                    tiles: player_state.kawahai[..player_state.kawahai_len as usize].to_vec(),
+                    tiles: player_state.kawahai[..kawahai_len].to_vec(),
                 },
                 Fulo {
-                    mentsu: player_state.mentsu[..player_state.mentsu_len as usize].to_vec(),
+                    mentsu: player_state.mentsu[..mentsu_len].to_vec(),
                 },
                 Score {
                     score: ScorePoint(player_state.score),
@@ -288,11 +292,11 @@ impl MahjongWorld {
         }
     }
 
-    /// ツモ時の手牌とカーソルのビューを取得します
-    pub fn tsumo_view(
-        &mut self,
-        teban: usize,
-    ) -> Result<crate::systems::tsumo::TsumoView<'_>, WorldError> {
+    /// ツモ時の手牌とカーソルのビューを使用してクロージャを実行します
+    pub fn with_tsumo_view<F, R>(&mut self, teban: usize, f: F) -> Result<R, WorldError>
+    where
+        F: FnOnce(crate::systems::tsumo::TsumoView<'_>) -> R,
+    {
         let entity = self
             .query_player(teban)
             .ok_or(WorldError::PlayerNotFound(teban))?;
@@ -300,13 +304,9 @@ impl MahjongWorld {
             .world
             .query_one::<(&mut Hand, &mut Cursol)>(entity)
             .map_err(WorldError::EntityError)?;
-        let (_hand, _cursol) = q.get().ok_or(WorldError::ComponentsNotFound)?;
+        let (hand, cursol) = q.get().ok_or(WorldError::ComponentsNotFound)?;
 
-        // Note: システム側でこのビューを使用して更新を行います。
-        // hecsの借用制約のため、通常はこのメソッド内でクロージャとして実行するか、
-        // もしくはトランスミュート等が必要になることがありますが、
-        // ここでは単純化のためにunreachable!としておき、実際の呼び出し側で直接クエリを行う方針にします。
-        unreachable!("システムの呼び出し側で hecs::World を直接クエリしてください")
+        Ok(f(crate::systems::tsumo::TsumoView { hand, cursol }))
     }
 }
 
