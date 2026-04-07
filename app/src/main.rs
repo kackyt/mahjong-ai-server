@@ -60,6 +60,7 @@ struct App {
 #[derive(Clone)]
 struct AI {
     symbol: MJPInterfaceFuncP,
+    #[allow(dead_code)]
     inst: *mut std::ffi::c_void,
 }
 
@@ -432,11 +433,13 @@ impl Application for App {
                         }
                         Command::none()
                     } else {
-                        let result = match flag {
-                            MJPIR_SUTEHAI => {
-                                state.sutehai(&mut self.play_log, index as usize, false)
-                            }
-                            MJPIR_REACH => state.sutehai(&mut self.play_log, index as usize, true),
+                        let result: anyhow::Result<PaiT> = match flag {
+                            MJPIR_SUTEHAI => state
+                                .sutehai(&mut self.play_log, index as usize, false)
+                                .map_err(|e| anyhow!(e)),
+                            MJPIR_REACH => state
+                                .sutehai(&mut self.play_log, index as usize, true)
+                                .map_err(|e| anyhow!(e)),
                             _ => Err(anyhow!("unknown flag {}", flag)),
                         };
 
@@ -533,8 +536,8 @@ impl Application for App {
                                 if let Some(gp_err) = m.downcast_ref::<GameProcessError>() {
                                     match gp_err {
                                         GameProcessError::IllegalSutehaiAfterRiichi => {}
-                                        GameProcessError::Other(e) => {
-                                            self.show_modal(&format!("{:?}", e));
+                                        _ => {
+                                            self.show_modal(&format!("{:?}", gp_err));
                                         }
                                     }
                                 } else {

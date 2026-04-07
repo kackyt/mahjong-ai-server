@@ -13,7 +13,15 @@ impl GameRegistry {
             games: HashMap::new(),
         }
     }
+}
 
+impl Default for GameRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl GameRegistry {
     pub fn insert(&mut self, id: usize, world: MahjongWorld) {
         self.games.insert(id, world);
     }

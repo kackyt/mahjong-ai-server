@@ -1,7 +1,7 @@
 use super::{
-    BakazeIndex, Cursol, CursolPos, DiscardPile, DoraLen, Fulo, Hand, KyokuId, OyaIndex, PlayerInfo,
-    RiichiStatus, RiichibouCount, Score, ScorePoint, SeqCount, TakuCursolPos, TsumobouCount, Wind,
-    WindIndex,
+    BakazeIndex, Cursol, CursolPos, DiscardPile, DoraLen, Fulo, Hand, KyokuId, OyaIndex,
+    PlayerInfo, RiichiStatus, RiichibouCount, Score, ScorePoint, SeqCount, TakuCursolPos,
+    TsumobouCount, Wind, WindIndex,
 };
 use crate::mahjong_generated::open_mahjong::{GameStateT, RuleT, TakuT};
 use hecs::{Entity, World};
@@ -86,9 +86,7 @@ impl MahjongWorld {
                 Score {
                     score: ScorePoint(25000),
                 },
-                Wind {
-                    wind: WindIndex(0),
-                },
+                Wind { wind: WindIndex(0) },
                 RiichiStatus {
                     is_riichi: false,
                     is_ippatsu: false,

@@ -277,9 +277,7 @@ impl GameStateT {
             // hecsのBorrow制約のため、特定のスコープでクエリを実行する
             let mut q = world
                 .world
-                .query_one::<(&mut crate::components::Hand, &mut crate::components::Cursol)>(
-                    entity,
-                )
+                .query_one::<(&mut crate::components::Hand, &mut crate::components::Cursol)>(entity)
                 .map_err(crate::components::world::WorldError::EntityError)?;
             let (hand, cursol) = q
                 .get()
@@ -357,12 +355,17 @@ impl GameStateT {
             .ok_or(crate::components::world::WorldError::PlayerNotFound(teban))?;
 
         let event = {
-            let mut q = world.world.query_one::<(
-                &mut crate::components::Hand,
-                &mut crate::components::DiscardPile,
-                &mut crate::components::RiichiStatus,
-            )>(entity).map_err(crate::components::world::WorldError::EntityError)?;
-            let (hand, discard_pile, riichi_status) = q.get().ok_or(crate::components::world::WorldError::ComponentsNotFound)?;
+            let mut q = world
+                .world
+                .query_one::<(
+                    &mut crate::components::Hand,
+                    &mut crate::components::DiscardPile,
+                    &mut crate::components::RiichiStatus,
+                )>(entity)
+                .map_err(crate::components::world::WorldError::EntityError)?;
+            let (hand, discard_pile, riichi_status) = q
+                .get()
+                .ok_or(crate::components::world::WorldError::ComponentsNotFound)?;
 
             let view = crate::systems::sutehai::SutehaiView {
                 hand,

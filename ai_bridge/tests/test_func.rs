@@ -65,10 +65,13 @@ mod tests {
 
                 println!("\r");
 
-                assert!(player.is_tsumo, "ツモ状態でないのに tsumohai を検証に使用しています");
+                assert!(
+                    player.is_tsumo,
+                    "ツモ状態でないのに tsumohai を検証に使用しています"
+                );
                 let mut tehai_14 = player.tehai.to_vec();
                 tehai_14.push(player.tsumohai.clone());
-                
+
                 print!("Tehai 14: ");
                 for p in &tehai_14 {
                     print!("{}(id:{},num:{}) ", p, p.id, p.pai_num);
@@ -129,7 +132,10 @@ mod tests {
 
                 println!("\r");
 
-                assert!(player.is_tsumo, "ツモ状態でないのに tsumohai を検証に使用しています");
+                assert!(
+                    player.is_tsumo,
+                    "ツモ状態でないのに tsumohai を検証に使用しています"
+                );
                 let mut tehai_14 = player.tehai.to_vec();
                 tehai_14.push(player.tsumohai.clone());
                 let shanten = PaiState::from(&tehai_14).get_shanten(0);

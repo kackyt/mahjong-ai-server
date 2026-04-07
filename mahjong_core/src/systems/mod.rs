@@ -14,13 +14,13 @@ mod tests {
     #[test]
     fn test_tsumo_to_sutehai() {
         let mut world = MahjongWorld::new(4);
-        
+
         let teban = world.context.teban as usize;
         let seq = world.context.seq;
         let kyoku_id = world.context.kyoku_id;
         let index = 0;
         let is_riichi = false;
-        
+
         let entity = world.query_player(teban).unwrap();
         let taku_cursol = world.context.taku_cursol.0 as usize;
         let tsumohai = world.context.taku.get(taku_cursol).unwrap();
@@ -45,7 +45,7 @@ mod tests {
         }
 
         world.context.taku_cursol.0 += 1; // normally done globally
-        
+
         let seq_next = crate::components::SeqCount(seq.0 + 1);
 
         {
