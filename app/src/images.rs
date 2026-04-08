@@ -2,7 +2,10 @@ use iced::widget::image;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+/// 相手の手牌など、牌の裏面を表示するときに使う定数
 pub const BACK_TILE_NUM: u32 = 99;
+/// UIレイアウト調整用の透明プレースホルダー定数
+pub const TRANSPARENT_TILE_NUM: u32 = 100;
 
 thread_local! {
     static CACHE: RefCell<HashMap<(u32, u16), image::Handle>> = RefCell::new(HashMap::new());
@@ -16,6 +19,13 @@ pub fn get(pai_num: u32, angle: u16) -> image::Handle {
         }
 
         let handle = if pai_num == BACK_TILE_NUM {
+            // 相手の手牌は裏面（ura.gif）で表示する
+            image::Handle::from_path(format!(
+                "{}/images/haiga/ura.gif",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+        } else if pai_num == TRANSPARENT_TILE_NUM {
+            // UIレイアウト調整用の透明プレースホルダー
             image::Handle::from_path(format!(
                 "{}/images/haiga/transparent.gif",
                 env!("CARGO_MANIFEST_DIR")

@@ -33,9 +33,9 @@ pub fn view<'a>(kawahai: &[PaiT], kawahai_len: usize) -> Element<'a, Message> {
 
     let mut tile_elements: Vec<Element<'a, Message>> = Vec::new();
 
-    // UIレイアウトのズレを防ぐため、先頭に透明なプレースホルダー画像(pai_num=BACK_TILE_NUM)を配置
+    // UIレイアウトのズレを防ぐため、先頭に透明なプレースホルダー画像を配置
     tile_elements.push(
-        container(image(images::get(images::BACK_TILE_NUM, 0)))
+        container(image(images::get(images::TRANSPARENT_TILE_NUM, 0)))
             .height(Length::Fixed(38.0))
             .into(),
     );
