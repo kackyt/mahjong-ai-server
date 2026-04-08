@@ -10,10 +10,9 @@ use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
     ffi::{c_char, c_void, CStr},
-    sync::Mutex,
 };
 
-use crate::registry::GameRegistry;
+use crate::registry::G_REGISTRY;
 
 use crate::bindings::{
     MJIKawahai, MJITehai, MJITehai1, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA,
@@ -30,7 +29,7 @@ extern crate libc;
 
 // スレッドセーフではない
 pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(Default::default);
-pub static G_REGISTRY: Lazy<Mutex<GameRegistry>> = Lazy::new(|| Mutex::new(GameRegistry::new()));
+// G_REGISTRY is defined in registry.rs
 pub static mut G_STRUCTURE_TYPE: Lazy<HashMap<*mut c_void, usize>> = Lazy::new(HashMap::new);
 pub type MJPInterfaceFuncP = unsafe extern "system" fn(*mut c_void, usize, usize, usize) -> usize;
 
@@ -95,11 +94,11 @@ unsafe fn mjsend_message_impl(
     pstate: &mut PaiState,
 ) -> usize {
     let inst_usize = inst as usize;
-    let mut registry = G_REGISTRY.lock().unwrap();
+    let registry = G_REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
 
     // Convert world to GameStateT for compatibility until the DLL is fully updated.
     let mut local_state: GameStateT = Default::default();
-    let taku: &GameStateT = if let Some(world) = registry.get_mut(inst_usize) {
+    let taku: &GameStateT = if let Some(world) = registry.get(inst_usize) {
         world.to_game_state(&mut local_state);
         &local_state
     } else {
