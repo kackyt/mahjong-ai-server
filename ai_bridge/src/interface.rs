@@ -86,6 +86,15 @@ fn get_rule(state: &GameStateT, idx: u32) -> u32 {
     }
 }
 
+fn get_snapshot_for_instance(inst_usize: usize) -> Option<GameStateT> {
+    let registry = G_REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    registry.get(inst_usize).map(|world| {
+        let mut local_state = GameStateT::default();
+        world.to_game_state(&mut local_state);
+        local_state
+    })
+}
+
 unsafe fn mjsend_message_impl(
     inst: *mut c_void,
     message: usize,
@@ -94,13 +103,14 @@ unsafe fn mjsend_message_impl(
     pstate: &mut PaiState,
 ) -> usize {
     let inst_usize = inst as usize;
-    let registry = G_REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    let message_u32 = message as u32;
+    let taku_owned = match message_u32 {
+        MJMI_FUKIDASHI | MJMI_SETSTRUCTTYPE | MJMI_GETSCORE | MJMI_GETVERSION => None,
+        _ => get_snapshot_for_instance(inst_usize),
+    };
 
-    // Convert world to GameStateT for compatibility until the DLL is fully updated.
-    let mut local_state: GameStateT = Default::default();
-    let taku: &GameStateT = if let Some(world) = registry.get(inst_usize) {
-        world.to_game_state(&mut local_state);
-        &local_state
+    let taku: &GameStateT = if let Some(ref s) = taku_owned {
+        s
     } else {
         unsafe { &*std::ptr::addr_of!(G_STATE) }
     };
