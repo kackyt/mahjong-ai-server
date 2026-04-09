@@ -15,7 +15,7 @@ pub fn view<'a>(
     is_opponent: bool,
     angle: u16,
 ) -> Element<'a, Message> {
-    let mk_img = |pai_num: u32| images::get(pai_num, angle);
+    let mk_img = |id: images::TileImageId| images::get(id, angle);
 
     let mut ui_tehai: Vec<Element<'a, Message>> = tehai[0..tehai_len]
         .iter()
@@ -24,12 +24,12 @@ pub fn view<'a>(
             if is_opponent {
                 image(mk_img(images::BACK_TILE_NUM)).into()
             } else if is_interactive {
-                button(image(mk_img(pai.pai_num as u32)))
+                button(image(mk_img(images::TileImageId(pai.pai_num as u32))))
                     .on_press(Message::Dahai(index))
                     .padding(0)
                     .into()
             } else {
-                image(mk_img(pai.pai_num as u32)).into()
+                image(mk_img(images::TileImageId(pai.pai_num as u32))).into()
             }
         })
         .collect();
@@ -39,12 +39,12 @@ pub fn view<'a>(
         let img = if is_opponent {
             image(mk_img(images::BACK_TILE_NUM)).into()
         } else if is_interactive {
-            button(image(mk_img(tsumohai.pai_num as u32)))
+            button(image(mk_img(images::TileImageId(tsumohai.pai_num as u32))))
                 .on_press(Message::Dahai(tehai_len))
                 .padding(0)
                 .into()
         } else {
-            image(mk_img(tsumohai.pai_num as u32)).into()
+            image(mk_img(images::TileImageId(tsumohai.pai_num as u32))).into()
         };
         ui_tehai.push(img);
     }

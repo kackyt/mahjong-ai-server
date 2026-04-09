@@ -10,7 +10,7 @@ use crate::{images, Message};
 pub fn view<'a>(kawahai: &[PaiT], kawahai_len: usize) -> Element<'a, Message> {
     // Helper to create element
     let create_elem = |pai: &PaiT| {
-        let handle = images::get(pai.pai_num as u32, 0);
+        let handle = images::get(images::TileImageId(pai.pai_num as u32), 0);
 
         // Scale tiles:
         // 0/180 (Vertical/Portrait): Height ~38px
