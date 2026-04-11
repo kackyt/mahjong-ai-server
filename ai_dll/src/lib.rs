@@ -241,7 +241,7 @@ unsafe fn sync_game_state(
                 };
             }
         }
-        player.kawahai_len = std::cmp::min(count, 20) as u32;
+        player.kawahai_len = std::cmp::min(count, 20);
     }
 
     // 3. Get Dora
