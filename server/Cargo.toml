@@ -4,14 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[features]
-load-dll = ["ai_bridge/load-dll"]
 
 [dependencies]
 anyhow = "1.0.79"
 libc = "0.2.152"
-ai_bridge = { path = "../ai_bridge", features = ["load-dll"] }
+ai_bridge = { path = "../ai_bridge" }
 mahjong_core = { path = "../mahjong_core" }
 sentry = "0.32.1"
 clap = { version = "4.5.0", features = ["derive"] }
 dotenv = "0.15.0"
+
+[target.'cfg(target_arch = "x86")'.dependencies]
+ai_bridge = { path = "../ai_bridge", features = ["load-dll"] }
