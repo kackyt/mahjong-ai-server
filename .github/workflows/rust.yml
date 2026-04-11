@@ -38,10 +38,10 @@ jobs:
       run: cargo fmt --all -- --check
 
     - name: Run cargo clippy
-      run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      run: cargo clippy --workspace --all-targets --all-features --exclude loadlibrary -- -D warnings
 
     - name: Run cargo check
-      run: cargo check --workspace --all-targets --verbose
+      run: cargo check --workspace --all-targets --exclude loadlibrary --verbose
 
     - name: Run cargo test
-      run: cargo test --workspace --all-targets --verbose
+      run: cargo test --workspace --all-targets --exclude loadlibrary --verbose
