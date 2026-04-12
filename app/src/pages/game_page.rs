@@ -98,13 +98,8 @@ pub fn view<'a>(
                                 &player.tsumohai,
                                 player.is_tsumo,
                                 false,
-                                true,
-                                match *i {
-                                    1 => 270,
-                                    2 => 180,
-                                    3 => 90,
-                                    _ => 0,
-                                },
+                                false, // デバッグのために敢えて表向き表示
+                                0,
                             )
                         ]
                         .spacing(10)

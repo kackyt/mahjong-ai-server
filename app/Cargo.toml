@@ -12,9 +12,12 @@ env_logger = { version = "0.10", default-features = false, features = [
     "humantime",
 ] }
 
-ai_bridge = { path = "../ai_bridge", features = ["load-dll"] }
+ai_bridge = { path = "../ai_bridge" }
 mahjong_core = { path = "../mahjong_core" }
 log = "0.4.22"
 libc = "0.2.157"
 anyhow = "1.0.86"
 image = "0.25.9"
+
+[target.'cfg(target_arch = "x86")'.dependencies]
+ai_bridge = { path = "../ai_bridge", features = ["load-dll"] }

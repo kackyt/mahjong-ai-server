@@ -60,6 +60,7 @@ struct App {
 #[derive(Clone)]
 struct AI {
     symbol: MJPInterfaceFuncP,
+    #[allow(dead_code)]
     inst: *mut std::ffi::c_void,
 }
 
@@ -324,7 +325,10 @@ impl Application for App {
                                 let ai = self.ai_instances[next_teban - 1].clone();
                                 let tsumohai_num: usize =
                                     state.players[next_teban].tsumohai.pai_num.into();
-                                return Command::perform(ai.ai_next(tsumohai_num), Message::AICommand);
+                                return Command::perform(
+                                    ai.ai_next(tsumohai_num),
+                                    Message::AICommand,
+                                );
                             }
                         }
                     }
@@ -429,11 +433,13 @@ impl Application for App {
                         }
                         Command::none()
                     } else {
-                        let result = match flag {
-                            MJPIR_SUTEHAI => {
-                                state.sutehai(&mut self.play_log, index as usize, false)
-                            }
-                            MJPIR_REACH => state.sutehai(&mut self.play_log, index as usize, true),
+                        let result: anyhow::Result<PaiT> = match flag {
+                            MJPIR_SUTEHAI => state
+                                .sutehai(&mut self.play_log, index as usize, false)
+                                .map_err(|e| anyhow!(e)),
+                            MJPIR_REACH => state
+                                .sutehai(&mut self.play_log, index as usize, true)
+                                .map_err(|e| anyhow!(e)),
                             _ => Err(anyhow!("unknown flag {}", flag)),
                         };
 
@@ -487,7 +493,9 @@ impl Application for App {
                                         }
                                         // 3. Check CHI (Only from Kamicha/Left)
                                         // discarder_idx == 3 means Left relative to P0
-                                        if discarder_idx == 3 && !state.check_chii(0, &self.sutehai).is_empty() {
+                                        if discarder_idx == 3
+                                            && !state.check_chii(0, &self.sutehai).is_empty()
+                                        {
                                             self.can_chi_flag = true;
                                         }
 
@@ -514,10 +522,8 @@ impl Application for App {
                                         && next_teban - 1 < self.ai_instances.len()
                                     {
                                         let ai = self.ai_instances[next_teban - 1].clone();
-                                        let tsumohai_num: usize = state.players[next_teban]
-                                            .tsumohai
-                                            .pai_num
-                                            .into();
+                                        let tsumohai_num: usize =
+                                            state.players[next_teban].tsumohai.pai_num.into();
                                         return Command::perform(
                                             ai.ai_next(tsumohai_num),
                                             Message::AICommand,
@@ -530,8 +536,8 @@ impl Application for App {
                                 if let Some(gp_err) = m.downcast_ref::<GameProcessError>() {
                                     match gp_err {
                                         GameProcessError::IllegalSutehaiAfterRiichi => {}
-                                        GameProcessError::Other(e) => {
-                                            self.show_modal(&format!("{:?}", e));
+                                        _ => {
+                                            self.show_modal(&format!("{:?}", gp_err));
                                         }
                                     }
                                 } else {

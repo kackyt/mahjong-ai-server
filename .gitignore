@@ -2,3 +2,4 @@
 **/target
 logs/
 **/node_modules
+__pycache__/

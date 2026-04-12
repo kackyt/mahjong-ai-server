@@ -12,6 +12,8 @@ use std::{
     ffi::{c_char, c_void, CStr},
 };
 
+use crate::registry::G_REGISTRY;
+
 use crate::bindings::{
     MJIKawahai, MJITehai, MJITehai1, MJMI_FUKIDASHI, MJMI_GETAGARITEN, MJMI_GETDORA,
     MJMI_GETHAIREMAIN, MJMI_GETKAWA, MJMI_GETKAWAEX, MJMI_GETMACHI, MJMI_GETRULE, MJMI_GETSCORE,
@@ -27,6 +29,7 @@ extern crate libc;
 
 // スレッドセーフではない
 pub static mut G_STATE: Lazy<GameStateT> = Lazy::new(Default::default);
+// G_REGISTRY is defined in registry.rs
 pub static mut G_STRUCTURE_TYPE: Lazy<HashMap<*mut c_void, usize>> = Lazy::new(HashMap::new);
 pub type MJPInterfaceFuncP = unsafe extern "system" fn(*mut c_void, usize, usize, usize) -> usize;
 
@@ -83,6 +86,15 @@ fn get_rule(state: &GameStateT, idx: u32) -> u32 {
     }
 }
 
+fn get_snapshot_for_instance(inst_usize: usize) -> Option<GameStateT> {
+    let registry = G_REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    registry.get(inst_usize).map(|world| {
+        let mut local_state = GameStateT::default();
+        world.to_game_state(&mut local_state);
+        local_state
+    })
+}
+
 unsafe fn mjsend_message_impl(
     inst: *mut c_void,
     message: usize,
@@ -90,7 +102,18 @@ unsafe fn mjsend_message_impl(
     param2: usize,
     pstate: &mut PaiState,
 ) -> usize {
-    let taku: &GameStateT = unsafe { &*std::ptr::addr_of!(G_STATE) };
+    let inst_usize = inst as usize;
+    let message_u32 = message as u32;
+    let taku_owned = match message_u32 {
+        MJMI_FUKIDASHI | MJMI_SETSTRUCTTYPE | MJMI_GETSCORE | MJMI_GETVERSION => None,
+        _ => get_snapshot_for_instance(inst_usize),
+    };
+
+    let taku: &GameStateT = if let Some(ref s) = taku_owned {
+        s
+    } else {
+        unsafe { &*std::ptr::addr_of!(G_STATE) }
+    };
 
     /*
     println!(
@@ -136,7 +159,7 @@ unsafe fn mjsend_message_impl(
                 for i in 0..player.tehai_len as usize {
                     tehai.tehai[i] = player.tehai[i].pai_num as u32;
                 }
-                        tehai.tehai_max = player.tehai_len;
+                tehai.tehai_max = player.tehai_len;
                 tehai.minkan_max = 0;
                 tehai.minkou_max = 0;
                 tehai.minshun_max = 0;
@@ -240,7 +263,10 @@ unsafe fn mjsend_message_impl(
                 } else {
                     pstate.hai_count_m[i] += 1;
                 }
-                let all_mentsu = all_of_mentsu(pstate, v_fulo.len());
+                let mut all_mentsu = all_of_mentsu(pstate, v_fulo.len());
+                if v_fulo.is_empty() {
+                    all_mentsu.extend(mahjong_core::shanten::all_of_chiitoitsu(pstate));
+                }
                 if i >= 27 {
                     pstate.hai_count_z[i - 27] -= 1;
                 } else if i >= 18 {
@@ -347,7 +373,10 @@ unsafe fn mjsend_message_impl(
 
             pstate.append(&agari_pai.unpack());
 
-            let all_mentsu = all_of_mentsu(pstate, v_fulo.len());
+            let mut all_mentsu = all_of_mentsu(pstate, v_fulo.len());
+            if v_fulo.is_empty() {
+                all_mentsu.extend(mahjong_core::shanten::all_of_chiitoitsu(pstate));
+            }
             let all_of_mentsu_with_agari = add_machi_to_mentsu(&all_mentsu, &agari_pai);
 
             let result = taku.get_best_agari(

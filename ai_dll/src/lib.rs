@@ -60,7 +60,12 @@ unsafe fn sync_game_state(
     let me_idx = game_state.teban as usize;
 
     // Tehai
-    for (i, &tehai_val) in tehai_struct.tehai.iter().enumerate().take(tehai_struct.tehai_max as usize) {
+    for (i, &tehai_val) in tehai_struct
+        .tehai
+        .iter()
+        .enumerate()
+        .take(tehai_struct.tehai_max as usize)
+    {
         let pai = tehai_val as u8;
         if i < 13 {
             game_state.players[me_idx].tehai[i] = PaiT {
@@ -236,7 +241,7 @@ unsafe fn sync_game_state(
                 };
             }
         }
-        player.kawahai_len = std::cmp::min(count, 20) as u32;
+        player.kawahai_len = std::cmp::min(count, 20);
     }
 
     // 3. Get Dora
@@ -301,9 +306,9 @@ pub unsafe extern "system" fn MJPInterfaceFunc(
                     state.tsumohai = -1; // No tile drawn yet
                 }
 
-                    if (&*std::ptr::addr_of!(G_STATE)).is_none() {
-                        *std::ptr::addr_of_mut!(G_STATE) = Some(GameStateT::default());
-                    }
+                if (&*std::ptr::addr_of!(G_STATE)).is_none() {
+                    *std::ptr::addr_of_mut!(G_STATE) = Some(GameStateT::default());
+                }
                 MESSAGE_FUNC = Some(std::mem::transmute::<usize, MJSendMessage>(param2));
             }
             0
@@ -318,9 +323,7 @@ pub unsafe extern "system" fn MJPInterfaceFunc(
                                     let player = &state.players[state.teban as usize];
                                     // Try to find the tile in hand (tsumohai or tehai)
                                     // Prioritize Tsumogiri (index 13) if tsumohai matches
-                                    if player.is_tsumo
-                                        && player.tsumohai.pai_num as usize == pai
-                                    {
+                                    if player.is_tsumo && player.tsumohai.pai_num as usize == pai {
                                         return consts::MJPIR_SUTEHAI | 13;
                                     }
 

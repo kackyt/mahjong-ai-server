@@ -19,6 +19,22 @@ use uuid::Uuid;
 pub enum GameProcessError {
     #[error("リーチ後はツモ切りのみです")]
     IllegalSutehaiAfterRiichi,
+    /// 面前ではない場合のエラー
+    #[error("面前ではありません")]
+    NotMenzen,
+    /// ツモっていない場合のエラー
+    #[error("ツモしていません")]
+    NotTsumo,
+    /// テンパイではない場合のエラー
+    #[error("テンパイではありません")]
+    NotTenpai,
+    /// ECS世界（MahjongWorld）におけるエラー
+    #[error("World error: {0}")]
+    WorldError(#[from] crate::components::world::WorldError),
+    /// 各システム（ツモ・打牌等）におけるエラー
+    #[error("System error: {0}")]
+    SystemError(#[from] crate::systems::types::SystemError),
+    /// その他のエラー（anyhow等）
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -232,140 +248,147 @@ impl GameStateT {
     }
 
     /// ツモを行います。
-    pub fn tsumo(&mut self, play_log: &mut PlayLog) -> anyhow::Result<()> {
-        let player = &mut self.players[self.teban as usize];
-        player.is_tsumo = true;
+    #[cfg(feature = "ecs")]
+    pub fn tsumo(&mut self, play_log: &mut PlayLog) -> Result<(), GameProcessError> {
+        let mut world = crate::components::world::MahjongWorld::from_game_state(self);
 
-        if self.is_non_duplicate {
-            player.tsumohai = self.taku.get(self.taku_cursol as usize)?;
+        let teban = self.teban as usize;
+        let taku_cursol = if self.is_non_duplicate {
+            self.taku_cursol as usize
         } else {
-            player.tsumohai = self.taku.get(player.cursol as usize)?;
-        }
+            self.players[teban].cursol as usize
+        };
+        let tsumohai = self.taku.get(taku_cursol)?;
+
+        let tsumo_input = crate::systems::tsumo::TsumoInput {
+            teban,
+            seq: crate::components::SeqCount(self.seq),
+            kyoku_id: crate::components::KyokuId(self.kyoku_id),
+            is_non_duplicate: self.is_non_duplicate,
+            taku_cursol: crate::components::TakuCursolPos(taku_cursol as u32),
+            tsumohai: tsumohai.clone(),
+        };
+
+        let entity = world
+            .query_player(teban)
+            .ok_or(crate::components::world::WorldError::PlayerNotFound(teban))?;
+
+        let event = {
+            // hecsのBorrow制約のため、特定のスコープでクエリを実行する
+            let mut q = world
+                .world
+                .query_one::<(&mut crate::components::Hand, &mut crate::components::Cursol)>(entity)
+                .map_err(crate::components::world::WorldError::EntityError)?;
+            let (hand, cursol) = q
+                .get()
+                .ok_or(crate::components::world::WorldError::ComponentsNotFound)?;
+
+            let view = crate::systems::tsumo::TsumoView { hand, cursol };
+            crate::systems::tsumo::run_tsumo(view, &tsumo_input)?
+        };
 
         play_log.append_actions_log(
-            self.kyoku_id,
-            self.teban as i32,
-            self.seq as i32,
+            event.kyoku_id.0,
+            event.teban as i32,
+            event.seq.0 as i32,
             String::from("tsumo"),
-            player.tsumohai.get_pai_id(),
+            event.tsumohai.get_pai_id(),
         );
-        self.seq += 1;
 
+        world.context.seq.0 += 1;
+
+        world.to_game_state(self);
         self.next_cursol();
-
         Ok(())
     }
 
     /// 牌を捨てます。立直判定や一発の解除、河への追加を行います。
-    /// TODO: 副露対応を捨て牌処理に実装する（後日Issue化）
-    ///
-    /// # Arguments
-    /// * `play_log` - ログ
-    /// * `index` - 捨てる牌の手牌インデックス（13の場合はツモ切り）
-    /// * `is_riichi` - 立直宣言するかどうか
+    #[cfg(feature = "ecs")]
     pub fn sutehai(
         &mut self,
         play_log: &mut PlayLog,
         index: usize,
         is_riichi: bool,
-    ) -> anyhow::Result<PaiT> {
-        let player = &mut self.players[self.teban as usize];
-
-        let tehai_len = player.tehai_len as usize;
-
-        // ツモ切りの判定: indexがtehai_lenと等しい
-        let is_tsumogiri = index == tehai_len;
-
-        // インデックスの正当性チェック
-        ensure!(index <= tehai_len, "Invalid discard index");
-
-        // 副露後のチェック: is_tsumoがfalseの場合、ツモ切りはできない
-        if !player.is_tsumo {
-            ensure!(!is_tsumogiri, "Cannot tsumogiri after fulo (no tsumo tile)");
-        }
-
-        let mut kawahai = if is_tsumogiri {
-            // ツモ切り
-            player.tsumohai.clone()
-        } else {
-            // 手出し
-            let mut tehai: Vec<PaiT> = player.tehai.to_vec();
-            let p = tehai.remove(index);
-
-            // ツモ番の場合のみ、ツモ牌を手牌に加えてソートする
-            if player.is_tsumo {
-                tehai.push(player.tsumohai.clone());
-                tehai.sort_unstable();
-            }
-            p
-        };
-
-        ensure!(
-            !player.is_riichi || is_tsumogiri,
-            GameProcessError::IllegalSutehaiAfterRiichi
-        );
-
+    ) -> Result<PaiT, GameProcessError> {
+        // バリデーション（非ECSのレガシー構造を参照）
         if is_riichi {
-            ensure!(!player.is_riichi, "すでにリーチしています");
-            ensure!(player.mentsu_len == 0, "面前ではありません");
+            let player = &self.players[self.teban as usize];
+            if player.mentsu_len != 0 {
+                return Err(GameProcessError::NotMenzen);
+            }
+            if !player.is_tsumo {
+                return Err(GameProcessError::NotTsumo);
+            }
 
-            let mut tehai_check: Vec<PaiT> = player.tehai.iter().take(tehai_len).cloned().collect();
-            if !is_tsumogiri {
+            // 立直が可能かチェック（シャンテン数）
+            let mut tehai_check: Vec<PaiT> = player
+                .tehai
+                .iter()
+                .take(player.tehai_len as usize)
+                .cloned()
+                .collect();
+            if index < player.tehai_len as usize {
                 tehai_check.remove(index);
                 tehai_check.push(player.tsumohai.clone());
                 tehai_check.sort_unstable();
             }
-
             let mut state = PaiState::from(&tehai_check);
             let shanten = state.get_shanten(player.mentsu_len as usize);
-            ensure!(shanten == 0, "テンパイではありません");
-
-            player.is_riichi = true;
-            player.is_ippatsu = true;
-            player.score -= 1000;
-            kawahai.is_riichi = true;
-        } else {
-            player.is_ippatsu = false;
-        }
-
-        // 手牌の更新
-        if !is_tsumogiri {
-            let mut tehai: Vec<PaiT> = player.tehai.iter().take(tehai_len).cloned().collect();
-            tehai.remove(index);
-
-            if player.is_tsumo {
-                tehai.push(player.tsumohai.clone());
-                tehai.sort_unstable();
-            }
-
-            // 書き戻し
-            player.tehai.clone_from_slice(&tehai);
-            if !player.is_tsumo {
-                player.tehai_len -= 1;
+            if shanten != 0 {
+                return Err(GameProcessError::NotTenpai);
             }
         }
 
-        player.kawahai[player.kawahai_len as usize] = kawahai.clone();
+        let mut world = crate::components::world::MahjongWorld::from_game_state(self);
+
+        let teban = self.teban as usize;
+        let sutehai_input = crate::systems::sutehai::SutehaiInput {
+            kyoku_id: crate::components::KyokuId(self.kyoku_id),
+            teban,
+            seq: crate::components::SeqCount(self.seq),
+            index,
+            is_riichi,
+        };
+
+        let entity = world
+            .query_player(teban)
+            .ok_or(crate::components::world::WorldError::PlayerNotFound(teban))?;
+
+        let event = {
+            let mut q = world
+                .world
+                .query_one::<(
+                    &mut crate::components::Hand,
+                    &mut crate::components::DiscardPile,
+                    &mut crate::components::RiichiStatus,
+                )>(entity)
+                .map_err(crate::components::world::WorldError::EntityError)?;
+            let (hand, discard_pile, riichi_status) = q
+                .get()
+                .ok_or(crate::components::world::WorldError::ComponentsNotFound)?;
+
+            let view = crate::systems::sutehai::SutehaiView {
+                hand,
+                discard_pile,
+                riichi_status,
+            };
+            crate::systems::sutehai::run_sutehai(view, &sutehai_input)?
+        };
 
         play_log.append_actions_log(
-            self.kyoku_id,
-            self.teban as i32,
-            self.seq as i32,
+            event.kyoku_id.0,
+            event.teban as i32,
+            event.seq.0 as i32,
             String::from("sutehai"),
-            player.kawahai[player.kawahai_len as usize].get_pai_id(),
+            event.kawahai.get_pai_id(),
         );
-        self.seq += 1;
 
-        player.kawahai_len += 1;
-        player.tsumohai = Default::default();
+        world.context.seq.0 += 1;
+        world.context.teban = (world.context.teban + 1) % world.players.len() as u32;
 
-        player.is_tsumo = false;
-        self.teban += 1;
-        if self.teban == self.player_len {
-            self.teban = 0;
-        }
+        world.to_game_state(self);
 
-        Ok(kawahai)
+        Ok(event.kawahai)
     }
 
     /// ツモ和了の処理を行います。点数計算、スコア移動を適用し、結果を返します。
@@ -1247,7 +1270,8 @@ impl GameStateT {
             }
             ActionType::ACTION_SYNC => {
                 if player_index == self.teban as usize {
-                    self.tsumo(play_log)
+                    self.tsumo(play_log)?;
+                    Ok(())
                 } else {
                     Ok(())
                 }

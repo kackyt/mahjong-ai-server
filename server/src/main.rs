@@ -8,8 +8,8 @@ use ai_bridge::{
     ai_loader::{get_ai_symbol, load_ai},
     bindings::{
         MJEK_RYUKYOKU, MJPIR_REACH, MJPIR_SUTEHAI, MJPIR_TSUMO, MJPI_BASHOGIME,
-        MJPI_CREATEINSTANCE, MJPI_ENDKYOKU, MJPI_INITIALIZE,
-        MJPI_STARTGAME, MJPI_STARTKYOKU, MJPI_SUTEHAI,
+        MJPI_CREATEINSTANCE, MJPI_ENDKYOKU, MJPI_INITIALIZE, MJPI_STARTGAME, MJPI_STARTKYOKU,
+        MJPI_SUTEHAI,
     },
     interface::{mjsend_message, G_STATE},
 };
@@ -44,10 +44,7 @@ unsafe fn experiment(func: MJPInterfaceFuncP, inst: *mut c_void, play_log: &mut 
         {
             let state = unsafe { &mut *std::ptr::addr_of_mut!(G_STATE) };
             let _ = state.tsumo(play_log);
-            tsumohai_num = state.players[state.teban as usize]
-                .tsumohai
-                .pai_num
-                .into();
+            tsumohai_num = state.players[state.teban as usize].tsumohai.pai_num.into();
         }
 
         let ret: u32 = func(inst, MJPI_SUTEHAI as usize, tsumohai_num, 0) as u32;
@@ -121,17 +118,13 @@ fn cmd(args: &Command) -> anyhow::Result<()> {
     let handle = load_ai(&path)?;
 
     unsafe {
-        let func: MJPInterfaceFuncP =
-            std::mem::transmute::<*const c_void, MJPInterfaceFuncP>(get_ai_symbol(handle, "MJPInterfaceFunc")?);
+        let func: MJPInterfaceFuncP = std::mem::transmute::<*const c_void, MJPInterfaceFuncP>(
+            get_ai_symbol(handle, "MJPInterfaceFunc")?,
+        );
         println!("MJPInterfaceFunc :{:p}", func);
         println!("test create instance");
 
-        let size = func(
-            std::ptr::null_mut(),
-            MJPI_CREATEINSTANCE as usize,
-            0,
-            0,
-        );
+        let size = func(std::ptr::null_mut(), MJPI_CREATEINSTANCE as usize, 0, 0);
 
         println!("size = {}", size);
 
@@ -143,12 +136,7 @@ fn cmd(args: &Command) -> anyhow::Result<()> {
 
             ensure!(!inst.is_null(), "cannot allocate AI memory.");
 
-            let init_success = func(
-                inst,
-                MJPI_INITIALIZE as usize,
-                0,
-                sendmes_ptr as usize,
-            );
+            let init_success = func(inst, MJPI_INITIALIZE as usize, 0, sendmes_ptr as usize);
 
             println!("init end {} {:p}", init_success, inst);
 
@@ -159,12 +147,7 @@ fn cmd(args: &Command) -> anyhow::Result<()> {
 
             func(inst, MJPI_STARTGAME as usize, 0, 0);
             println!("start game end");
-            func(
-                inst,
-                MJPI_BASHOGIME as usize,
-                dummy.as_ptr() as usize,
-                0,
-            );
+            func(inst, MJPI_BASHOGIME as usize, dummy.as_ptr() as usize, 0);
             println!("bashogime end");
 
             if let Some(paiyama_path) = &args.paiyama_path {

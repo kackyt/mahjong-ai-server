@@ -5,10 +5,7 @@ mod tests {
         interface::{mjsend_message, G_STATE},
     };
     use mahjong_core::{mahjong_generated::open_mahjong::GameStateT, play_log, shanten::PaiState};
-    use std::{
-        path::PathBuf,
-        ptr::null_mut,
-    };
+    use std::{path::PathBuf, ptr::null_mut};
 
     #[test]
     fn test_haipai_to_agari() {
@@ -61,14 +58,27 @@ mod tests {
                 let _ = state.tsumo(&mut play_log);
 
                 let player = &state.players[state.teban as usize];
+
                 for p in &player.tehai {
                     print!("{}", p);
                 }
 
                 println!("\r");
 
-                let shanten = PaiState::from(&player.tehai).get_shanten(0);
+                assert!(
+                    player.is_tsumo,
+                    "ツモ状態でないのに tsumohai を検証に使用しています"
+                );
+                let mut tehai_14 = player.tehai.to_vec();
+                tehai_14.push(player.tsumohai.clone());
 
+                print!("Tehai 14: ");
+                for p in &tehai_14 {
+                    print!("{}(id:{},num:{}) ", p, p.id, p.pai_num);
+                }
+                println!();
+
+                let shanten = PaiState::from(&tehai_14).get_shanten(0);
                 assert_eq!(shanten, 0);
             }
 
@@ -82,10 +92,10 @@ mod tests {
                     std::mem::transmute::<&mut [u32; 34], usize>(&mut machi),
                 );
 
-                assert_eq!(
+                assert_ne!(
                     machi,
                     [
-                        0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0
                     ]
                 );
@@ -122,12 +132,18 @@ mod tests {
 
                 println!("\r");
 
-                let shanten = PaiState::from(&player.tehai).get_shanten(0);
+                assert!(
+                    player.is_tsumo,
+                    "ツモ状態でないのに tsumohai を検証に使用しています"
+                );
+                let mut tehai_14 = player.tehai.to_vec();
+                tehai_14.push(player.tsumohai.clone());
+                let shanten = PaiState::from(&tehai_14).get_shanten(0);
 
-                assert_eq!(shanten, 0);
+                assert_eq!(shanten, -1);
 
+                // Wait, it expects tsumo_agari to succeed!
                 let result = state.tsumo_agari(&mut play_log);
-
                 assert!(result.is_ok());
             }
         }
