@@ -1,6 +1,6 @@
 use crate::components::{DiscardPile, Hand, KyokuId, RiichiStatus, SeqCount};
 use crate::mahjong_generated::open_mahjong::PaiT;
-use crate::systems::types::SystemError;
+use crate::systems::types::{InvalidOperationReason, SystemError};
 
 /// 打牌システムのビュー。手牌、河、および立直状態の変更権限を持ちます。
 pub struct SutehaiView<'w> {
@@ -45,17 +45,17 @@ pub fn run_sutehai(
 
     // リーチ済みの場合は、ツモ切り以外不許可
     if view.riichi_status.is_riichi && !is_tsumogiri {
-        return Err(SystemError::InvalidOperation(
+        return Err(SystemError::InvalidOperation(InvalidOperationReason(
             "リーチ後はツモ切りのみです".to_string(),
-        ));
+        )));
     }
 
     // リーチ宣言の処理
     if input.is_riichi {
         if view.riichi_status.is_riichi {
-            return Err(SystemError::InvalidOperation(
+            return Err(SystemError::InvalidOperation(InvalidOperationReason(
                 "すでにリーチしています".to_string(),
-            ));
+            )));
         }
         view.riichi_status.is_riichi = true;
         view.riichi_status.is_ippatsu = true;
@@ -68,14 +68,18 @@ pub fn run_sutehai(
     // 捨て牌の特定
     let mut kawahai = if is_tsumogiri {
         if !view.hand.is_tsumo {
-            return Err(SystemError::InvalidOperation(
+            return Err(SystemError::InvalidOperation(InvalidOperationReason(
                 "ツモしていません (ツモ切り不可)".to_string(),
-            ));
+            )));
         }
         view.hand
             .tsumohai
             .as_ref()
-            .ok_or_else(|| SystemError::InvalidOperation("ツモ牌が存在しません".to_string()))?
+            .ok_or_else(|| {
+                SystemError::InvalidOperation(InvalidOperationReason(
+                    "ツモ牌が存在しません".to_string(),
+                ))
+            })?
             .clone()
     } else {
         view.hand.tiles[input.index].clone()

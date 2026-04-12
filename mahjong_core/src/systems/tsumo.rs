@@ -1,5 +1,5 @@
 use crate::components::{Cursol, Hand, KyokuId, SeqCount, TakuCursolPos};
-use crate::systems::types::SystemError;
+use crate::systems::types::{InvalidOperationReason, SystemError};
 
 /// ツモシステムのビュー。手牌とカーソルの変更権限を持ちます。
 pub struct TsumoView<'w> {
@@ -38,9 +38,9 @@ pub struct TsumoEvent {
 /// ツモシステムを実行し、状態を更新します。
 pub fn run_tsumo(view: TsumoView<'_>, input: &TsumoInput) -> Result<TsumoEvent, SystemError> {
     if view.hand.is_tsumo {
-        return Err(SystemError::InvalidOperation(
+        return Err(SystemError::InvalidOperation(InvalidOperationReason(
             "すでにツモしています".to_string(),
-        ));
+        )));
     }
     view.hand.is_tsumo = true;
 
