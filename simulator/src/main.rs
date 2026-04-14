@@ -1,15 +1,15 @@
-use std::fs::File;
-use std::io::Write;
 use anyhow::Result;
 use clap::Parser;
+use mahjong_ai::evaluator::eval_sutehai;
 use mahjong_core::{
     load_pailist::load_pailist,
     mahjong_generated::open_mahjong::{ActionType, GameStateT, PaiT},
     play_log::PlayLog,
     shanten::PaiState,
 };
-use mahjong_ai::evaluator::eval_sutehai;
 use serde::Serialize;
+use std::fs::File;
+use std::io::Write;
 
 #[derive(Parser, Debug)]
 #[command(author, about, version)]
@@ -57,22 +57,27 @@ fn main() -> Result<()> {
 
     let mut log_file = File::create(&args.log_file)?;
     let mut turn = 0;
-    
+
     loop {
         let current_player = game_state.teban as usize;
-        
+
         // Next player draw
         let _ = game_state.tsumo(&mut play_log);
 
         let player = &game_state.players[current_player];
-        
-        let mut tehai: Vec<PaiT> = player.tehai.iter().take(player.tehai_len as usize).cloned().collect();
+
+        let mut tehai: Vec<PaiT> = player
+            .tehai
+            .iter()
+            .take(player.tehai_len as usize)
+            .cloned()
+            .collect();
         let tehai_nums: Vec<u8> = tehai.iter().map(|p| p.pai_num).collect();
-        
+
         tehai.push(player.tsumohai.clone());
-        
+
         let shanten = PaiState::from(&tehai).get_shanten(player.mentsu_len as usize);
-        
+
         // Check for agari
         if shanten == -1 {
             let log_json = serde_json::to_string(&ActionLog {
@@ -122,7 +127,11 @@ fn main() -> Result<()> {
             is_tsumogiri = true;
             13
         } else {
-            let idx = player.tehai.iter().take(player.tehai_len as usize).position(|p| p.pai_num as u32 == best_discard);
+            let idx = player
+                .tehai
+                .iter()
+                .take(player.tehai_len as usize)
+                .position(|p| p.pai_num as u32 == best_discard);
             idx.unwrap_or(0)
         };
 
@@ -144,11 +153,17 @@ fn main() -> Result<()> {
 
         let log_json = serde_json::to_string(&action_log)?;
         writeln!(log_file, "{}", log_json)?;
-        
-        let _ = game_state.action(&mut play_log, ActionType::ACTION_SUTEHAI, current_player, discard_action);
-        
+
+        let _ = game_state.action(
+            &mut play_log,
+            ActionType::ACTION_SUTEHAI,
+            current_player,
+            discard_action,
+        );
+
         turn += 1;
-        if turn > 1000 { // fallback safety
+        if turn > 1000 {
+            // fallback safety
             break;
         }
     }
