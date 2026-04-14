@@ -127,7 +127,7 @@ pub fn mj0_simulate(
     }
 
     // 4. Monte Carlo Simulation (SIMU_SIZE)
-    let mut rng = rand::rng(); 
+    let mut rng = rand::rng();
 
     for _ in 0..SIMU_SIZE {
         let mut sim_wall = wall_counts;

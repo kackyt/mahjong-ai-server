@@ -138,9 +138,7 @@ fn run_simulation<W: Write>(
 
         // Use mahjong_ai to decide the discard
         let best_discard = match eval_sutehai(game_state) {
-            Ok((pai, _score)) => {
-                pai as u32
-            }
+            Ok((pai, _score)) => pai as u32,
             Err(_) => {
                 if player.is_tsumo {
                     player.tsumohai.pai_num as u32
@@ -248,9 +246,7 @@ mod tests {
             16, // 5m
         ];
         let mut full_wall = vec![0u32; 136];
-        for i in 0..tehai_ids.len() {
-            full_wall[i] = tehai_ids[i];
-        }
+        full_wall[..tehai_ids.len()].copy_from_slice(&tehai_ids);
         // 次に引く牌をアガリ牌(5m)にする
         // 配牌13枚 + 1枚(ツモ)
         full_wall[13] = 17; // 5m
@@ -274,8 +270,8 @@ mod tests {
 
         // 適当な手牌をロード
         let mut full_wall = vec![0u32; 136];
-        for i in 0..13 {
-            full_wall[i] = i as u32;
+        for (i, val) in full_wall.iter_mut().enumerate().take(13) {
+            *val = i as u32;
         }
         // 次に引く牌を特定
         full_wall[13] = 30; // 北
@@ -285,7 +281,7 @@ mod tests {
 
         // ツモ
         game_state.tsumo(&mut play_log)?;
-        
+
         // ツモ牌を捨てる (ツモ切り)
         game_state.action(&mut play_log, ActionType::ACTION_SUTEHAI, 0, 13)?;
 
