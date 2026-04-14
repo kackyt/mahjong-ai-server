@@ -2,7 +2,7 @@ use mahjong_core::mahjong_generated::open_mahjong::{GameStateT, MentsuType, PaiT
 use rand::Rng;
 
 #[cfg(not(test))]
-const SIMU_SIZE: usize = 5000;
+const SIMU_SIZE: usize = 1000;
 #[cfg(test)]
 const SIMU_SIZE: usize = 100;
 
@@ -119,12 +119,15 @@ pub fn mj0_simulate(
         }
     }
 
+    if game_state.player_len == 1 {
+        for i in 0..34 {
+            nokorihai[i] = wall_counts[i] as f64;
+        }
+        return (nokorihai, kikenhai, mentsu_simo, mentsu_toimen, mentsu_kami);
+    }
+
     // 4. Monte Carlo Simulation (SIMU_SIZE)
-    let mut rng = rand::rng(); // Use new rand syntax if updated, or thread_rng.
-                               // rand 0.9 uses rand::rng() probably?
-                               // Let's use old style or check docs?
-                               // Error said "use of unresolved module rand".
-                               // I added rand.
+    let mut rng = rand::rng(); 
 
     for _ in 0..SIMU_SIZE {
         let mut sim_wall = wall_counts;
@@ -134,7 +137,11 @@ pub fn mj0_simulate(
         let mut initial_mentsu_count = [0; 3];
         for (i, count) in initial_mentsu_count.iter_mut().enumerate() {
             let target_seat = (game_state.teban as usize + i + 1) % 4;
-            *count = game_state.players[target_seat].mentsu_len;
+            if (target_seat as u32) < game_state.player_len {
+                *count = game_state.players[target_seat].mentsu_len;
+            } else {
+                *count = 4; // Skip seat
+            }
         }
 
         let mut current_mentsu_count = initial_mentsu_count;

@@ -132,10 +132,18 @@ pub fn calc_score(
                 let kind_c = get_kind_coef(ctx.wrapper.game_state, i);
 
                 for _ in 0..needed {
+                    if rest <= 0.0 {
+                        probability = 0.0;
+                        break;
+                    }
                     probability *= (avail_in_wall) / rest;
                     probability *= dist_c;
                     probability *= kind_c;
                     rest -= 1.0;
+                }
+                if probability == 0.0 {
+                    possible = false;
+                    break;
                 }
             }
         }
@@ -410,10 +418,17 @@ pub fn chiitoi_point(
                 let kind_c = get_kind_coef(ctx.wrapper.game_state, i);
 
                 for _ in 0..needed {
+                    if rest <= 0.0 {
+                        probability = 0.0;
+                        break;
+                    }
                     probability *= (avail_in_wall) / rest;
                     probability *= dist_c;
                     probability *= kind_c;
                     rest -= 1.0;
+                }
+                if probability == 0.0 {
+                    return 0.0;
                 }
             }
         }
