@@ -102,8 +102,7 @@ pub fn calc_score(
     mentsu_list: &[Mentsu],
     diff: i32,
 ) -> f64 {
-    let res = calc_score_inner(ctx, current_counts, mentsu_list, diff);
-    res
+    calc_score_inner(ctx, current_counts, mentsu_list, diff)
 }
 
 fn calc_score_inner(
@@ -188,11 +187,11 @@ fn calc_score_inner(
                 let mut machi_hai_candidate = 0;
 
                 match m.mentsu_type() {
-                    MentsuType::TYPE_KOUTSU | MentsuType::TYPE_ATAMA => {
-                        if current_counts[first_pai] > ctx.hand_counts[first_pai] {
-                            is_machi_candidate = true;
-                            machi_hai_candidate = first_pai;
-                        }
+                    MentsuType::TYPE_KOUTSU | MentsuType::TYPE_ATAMA
+                        if current_counts[first_pai] > ctx.hand_counts[first_pai] =>
+                    {
+                        is_machi_candidate = true;
+                        machi_hai_candidate = first_pai;
                     }
                     MentsuType::TYPE_SHUNTSU => {
                         if current_counts[first_pai] > ctx.hand_counts[first_pai] {
@@ -257,6 +256,7 @@ fn calc_score_inner(
     max_val
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn shuntsu_point(
     ctx: &SearchContext,
     current_counts: &mut [u8; 34],
@@ -347,6 +347,7 @@ pub fn shuntsu_point(
     ret
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn koutsu_point(
     ctx: &SearchContext,
     current_counts: &mut [u8; 34],
@@ -388,12 +389,21 @@ pub fn koutsu_point(
             let m = Mentsu::new(&[p, p, p, dummy], 3, MentsuType::TYPE_KOUTSU);
             current_mentsu.push(m);
 
-            let mut added_diff = 0;
-            for k in 1..=3 {
-                if current_counts[i] + k > ctx.hand_counts[i] {
-                    added_diff += 1;
+            // added_diff: 枝刈り用の差分計算。
+            // current_counts[i]は既に+3済みの値。さらに将来的な利用を
+            // 仮定してk枚追加した場合に hand_counts を超えるかを確認する。
+            // この計算は意図的に保守的（大きめ）にすることで
+            // 枝刈りを積極的に働かせる設計になっている。
+            let added_diff = {
+                let have = ctx.hand_counts[i];
+                let mut d = 0i32;
+                for k in 1u8..=3 {
+                    if current_counts[i] + k > have {
+                        d += 1;
+                    }
                 }
-            }
+                d
+            };
 
             if koutsu_num - 1 > 0 {
                 ret += koutsu_point(
@@ -539,4 +549,74 @@ pub fn chiitoi_point(
         }
     }
     sum
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::AIStateWrapper;
+    use mahjong_core::mahjong_generated::open_mahjong::GameStateT;
+    use mahjong_core::play_log::PlayLog;
+
+    #[test]
+    fn test_calc_score_boundary_conditions() {
+        let mut game_state = GameStateT::default();
+        let mut play_log = PlayLog::new();
+        game_state.create(b"test", 1, &mut play_log);
+        game_state.shuffle();
+        game_state.start(&mut play_log);
+
+        let mut hand_counts = [0; 34];
+        for i in 0..4 {
+            hand_counts[i] = 3;
+        }
+
+        let wrapper = AIStateWrapper::new(&game_state);
+        let mut ctx = SearchContext {
+            wrapper: &wrapper,
+            shanten_base: 0,
+            nokori_sum: wrapper.nokorihai.iter().sum(),
+            hand_counts,
+            machi_cache: RefCell::new(HashMap::new()),
+        };
+
+        let mut current_counts = hand_counts;
+        let mentsu_list = Vec::new();
+
+        // 1. rest == 0 の場合 (nokori_sum = 0)
+        ctx.nokori_sum = 0.0;
+        let score = calc_score(&ctx, &mut current_counts, &mentsu_list, 0);
+        assert_eq!(score, 0.0, "nokori_sum が 0 の時はスコア 0.0 であるべき");
+
+        // 2. remain_counts 不足ケースは AIStateWrapper の構造上、
+        // 直接書き換えが難しいため、将来的な課題とする。
+        // （nokori_sum == 0 のケースで早期終了パスはカバーできている）
+    }
+
+    #[test]
+    fn test_chiitoi_point_boundary_conditions() {
+        let mut game_state = GameStateT::default();
+        let mut play_log = PlayLog::new();
+        game_state.create(b"test", 1, &mut play_log);
+        game_state.start(&mut play_log);
+
+        let hand_counts = [0; 34];
+        let wrapper = AIStateWrapper::new(&game_state);
+        let mut ctx = SearchContext {
+            wrapper: &wrapper,
+            shanten_base: 0,
+            nokori_sum: wrapper.nokorihai.iter().sum(),
+            hand_counts,
+            machi_cache: RefCell::new(HashMap::new()),
+        };
+        let mut current_counts = [0; 34];
+
+        // 1. rest == 0 の場合
+        ctx.nokori_sum = 0.0;
+        for i in 0..7 {
+            current_counts[i] = 2;
+        }
+        let score = chiitoi_point(&ctx, &mut current_counts, 7, 0);
+        assert_eq!(score, 0.0, "rest が 0 の時は chiitoi スコア 0.0 であるべき");
+    }
 }

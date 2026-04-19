@@ -247,6 +247,27 @@ impl GameStateT {
         self.players[index].clone()
     }
 
+    /// 現在の有効な山カーソルを取得します（重複山モードに対応）。
+    pub fn get_taku_cursor(&self) -> u32 {
+        if self.is_non_duplicate {
+            self.taku_cursol
+        } else {
+            self.players[self.teban as usize].cursol
+        }
+    }
+
+    /// 現在の手番プレイヤーがツモ和了しているかどうかを判定します。
+    pub fn check_tsumo_agari(&self) -> bool {
+        let player = &self.players[self.teban as usize];
+        if !player.is_tsumo {
+            return false;
+        }
+        let mut tehai: Vec<PaiT> = player.tehai[..player.tehai_len as usize].to_vec();
+        tehai.push(player.tsumohai.clone());
+        let shanten = PaiState::from(&tehai).get_shanten(player.mentsu_len as usize);
+        shanten == -1
+    }
+
     /// ツモを行います。
     #[cfg(feature = "ecs")]
     pub fn tsumo(&mut self, play_log: &mut PlayLog) -> Result<(), GameProcessError> {

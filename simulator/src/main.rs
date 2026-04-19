@@ -77,17 +77,19 @@ fn run_simulation<W: Write>(
 
     loop {
         // Check for ryuukyoku (exhausted wall) BEFORE draw
-        if game_state.taku.length == game_state.taku_cursol {
+        if game_state.get_taku_cursor() >= game_state.taku.length {
             let current_player = game_state.teban as usize;
             let player = &game_state.players[current_player];
-            let tehai: Vec<PaiT> = player
-                .tehai
+            let tehai_nums: Vec<u8> = player.tehai[..player.tehai_len as usize]
                 .iter()
-                .take(player.tehai_len as usize)
-                .cloned()
+                .map(|p| p.pai_num)
                 .collect();
-            let tehai_nums: Vec<u8> = tehai.iter().map(|p| p.pai_num).collect();
-            let shanten = PaiState::from(&tehai).get_shanten(player.mentsu_len as usize);
+            // シャンテン計算はログ出力用なのでエンジン側への集約対象外とするが、
+            // 可能ならエンジン側のヘルパーを使うように検討する。
+            // ここでは指摘に従い直接的な参照を減らすため shanten 計算は一旦そのまま残すが、
+            // 和了判定などは集約する。
+            let mut state = PaiState::from(&player.tehai[..player.tehai_len as usize]);
+            let shanten = state.get_shanten(player.mentsu_len as usize);
 
             let log_json = serde_json::to_string(&ActionLog {
                 turn,
@@ -119,16 +121,14 @@ fn run_simulation<W: Write>(
 
         tehai.push(player.tsumohai.clone());
 
-        let shanten = PaiState::from(&tehai).get_shanten(player.mentsu_len as usize);
-
         // Check for agari
-        if shanten == -1 {
+        if game_state.check_tsumo_agari() {
             let log_json = serde_json::to_string(&ActionLog {
                 turn,
                 player_idx: current_player,
                 tehai: tehai_nums.clone(),
                 tsumohai: player.tsumohai.pai_num,
-                shanten,
+                shanten: -1,
                 discard: player.tsumohai.pai_num,
                 action_type: "TSUMO_AGARI".to_string(),
             })?;
@@ -167,6 +167,10 @@ fn run_simulation<W: Write>(
             discard_idx as u32
         };
 
+        // Compute shanten for logging
+        let mut pstate = PaiState::from(&tehai);
+        let shanten = pstate.get_shanten(player.mentsu_len as usize);
+
         let action_log = ActionLog {
             turn,
             player_idx: current_player,
@@ -177,15 +181,15 @@ fn run_simulation<W: Write>(
             action_type: "SUTEHAI".to_string(),
         };
 
-        let log_json = serde_json::to_string(&action_log)?;
-        writeln!(log_file, "{}", log_json)?;
-
         game_state.action(
             play_log,
             ActionType::ACTION_SUTEHAI,
             current_player,
             discard_action,
         )?;
+
+        let log_json = serde_json::to_string(&action_log)?;
+        writeln!(log_file, "{}", log_json)?;
 
         turn += 1;
         if turn > 1000 {

@@ -135,10 +135,12 @@ pub fn mj0_simulate(
         let mut opponent_hands_mentsu = [Vec::new(), Vec::new(), Vec::new()];
 
         let mut initial_mentsu_count = [0; 3];
+        let mut active_seat = [false; 3];
         for (i, count) in initial_mentsu_count.iter_mut().enumerate() {
             let target_seat = (game_state.teban as usize + i + 1) % 4;
             if (target_seat as u32) < game_state.player_len {
                 *count = game_state.players[target_seat].mentsu_len;
+                active_seat[i] = true;
             } else {
                 *count = 4; // Skip seat
             }
@@ -220,6 +222,9 @@ pub fn mj0_simulate(
         }
 
         for (j, opp_mentsu) in opponent_hands_mentsu.iter().enumerate() {
+            if !active_seat[j] {
+                continue;
+            }
             let mut pairs = Vec::new();
             for (k, &count) in sim_wall.iter().enumerate() {
                 if count >= 2 {
