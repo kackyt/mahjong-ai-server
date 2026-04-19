@@ -494,6 +494,38 @@ impl PaiState {
         shanten
     }
 
+    pub fn get_standard_shanten(&mut self, n_fulo: usize) -> i32 {
+        let mut min_shanten = self.get_shanten_case(false, n_fulo);
+
+        // Standard form
+        for n in 0..9 {
+            if self.hai_count_m[n] >= 2 {
+                self.hai_count_m[n] -= 2;
+                min_shanten = min_shanten.min(self.get_shanten_case(true, n_fulo));
+                self.hai_count_m[n] += 2;
+            }
+            if self.hai_count_p[n] >= 2 {
+                self.hai_count_p[n] -= 2;
+                min_shanten = min_shanten.min(self.get_shanten_case(true, n_fulo));
+                self.hai_count_p[n] += 2;
+            }
+            if self.hai_count_s[n] >= 2 {
+                self.hai_count_s[n] -= 2;
+                min_shanten = min_shanten.min(self.get_shanten_case(true, n_fulo));
+                self.hai_count_s[n] += 2;
+            }
+        }
+        for n in 0..7 {
+            if self.hai_count_z[n] >= 2 {
+                self.hai_count_z[n] -= 2;
+                min_shanten = min_shanten.min(self.get_shanten_case(true, n_fulo));
+                self.hai_count_z[n] += 2;
+            }
+        }
+
+        min_shanten
+    }
+
     pub fn get_shanten(&mut self, n_fulo: usize) -> i32 {
         let mut min_shanten = self.get_shanten_case(false, n_fulo);
 

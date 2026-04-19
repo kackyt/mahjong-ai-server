@@ -4,15 +4,23 @@ use mahjong_core::agari::AgariBehavior;
 use mahjong_core::mahjong_generated::open_mahjong::{Mentsu, MentsuFlag, MentsuPai, MentsuType};
 use mahjong_core::shanten::PaiState;
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 #[derive(Clone)]
 pub struct SearchContext<'a> {
     pub wrapper: &'a AIStateWrapper<'a>,
     pub shanten_base: i32,
     pub nokori_sum: f64,
     pub hand_counts: [u8; 34],
+    pub machi_cache: RefCell<HashMap<([u8; 34], usize), f64>>,
 }
 
 pub fn calc_machi_coef(ctx: &SearchContext, current_counts: &[u8; 34], machi_hai: usize) -> f64 {
+    if let Some(&cached) = ctx.machi_cache.borrow().get(&(*current_counts, machi_hai)) {
+        return cached;
+    }
+
     let mut temp_counts = *current_counts;
     if temp_counts[machi_hai] > 0 {
         temp_counts[machi_hai] -= 1;
@@ -59,7 +67,7 @@ pub fn calc_machi_coef(ctx: &SearchContext, current_counts: &[u8; 34], machi_hai
             _ => {}
         }
 
-        let s = pstate.get_shanten(n_fulo);
+        let s = pstate.get_standard_shanten(n_fulo);
 
         match i {
             0..=8 => pstate.hai_count_m[i] -= 1,
@@ -77,14 +85,28 @@ pub fn calc_machi_coef(ctx: &SearchContext, current_counts: &[u8; 34], machi_hai
         }
     }
 
-    let mut ret = num / 5.0;
+    let ret = num / 5.0;
+    let mut final_ret = ret;
     if furiten {
-        ret *= 0.33;
+        final_ret *= 0.33;
     }
-    ret
+    ctx.machi_cache
+        .borrow_mut()
+        .insert((*current_counts, machi_hai), final_ret);
+    final_ret
 }
 
 pub fn calc_score(
+    ctx: &SearchContext,
+    current_counts: &mut [u8; 34],
+    mentsu_list: &[Mentsu],
+    diff: i32,
+) -> f64 {
+    let res = calc_score_inner(ctx, current_counts, mentsu_list, diff);
+    res
+}
+
+fn calc_score_inner(
     ctx: &SearchContext,
     current_counts: &mut [u8; 34],
     mentsu_list: &[Mentsu],
@@ -219,11 +241,12 @@ pub fn calc_score(
 
                     let agari_res = agari_state.get_agari(&yakus);
                     let score = agari_res.score as f64;
-                    let machi_coef = calc_machi_coef(ctx, current_counts, machi_hai_candidate);
-                    let term = 0.8 * probability * probability * score + 0.2 * probability * score;
-                    let val = machi_coef * term / (diff as f64).max(1.0);
-
-                    max_val += val;
+                    if score > 0.0 {
+                        let machi_coef = calc_machi_coef(ctx, current_counts, machi_hai_candidate);
+                        let term = 0.8 * probability * probability * score + 0.2 * probability * score;
+                        let val = machi_coef * term / (diff as f64).max(1.0);
+                        max_val += val;
+                    }
                 }
             }
         }
@@ -242,14 +265,8 @@ pub fn shuntsu_point(
     shuntsu_num: i32,
     _koutsu_pos: usize,
     shuntsu_pos: usize,
+    diff: i32,
 ) -> f64 {
-    let mut diff = 0;
-    for (i, &count) in current_counts.iter().enumerate().take(34) {
-        if count > ctx.hand_counts[i] {
-            diff += (count - ctx.hand_counts[i]) as i32;
-        }
-    }
-
     if diff > ctx.shanten_base + 2 || diff >= 7 {
         return 0.0;
     }
@@ -298,6 +315,17 @@ pub fn shuntsu_point(
             let m = Mentsu::new(&[p1, p2, p3, dummy], 3, MentsuType::TYPE_SHUNTSU);
             current_mentsu.push(m);
 
+            let mut added_diff = 0;
+            if current_counts[pai] > ctx.hand_counts[pai] {
+                added_diff += 1;
+            }
+            if current_counts[pai + 1] > ctx.hand_counts[pai + 1] {
+                added_diff += 1;
+            }
+            if current_counts[pai + 2] > ctx.hand_counts[pai + 2] {
+                added_diff += 1;
+            }
+
             ret += shuntsu_point(
                 ctx,
                 current_counts,
@@ -306,6 +334,7 @@ pub fn shuntsu_point(
                 shuntsu_num - 1,
                 _koutsu_pos,
                 i,
+                diff + added_diff,
             );
 
             current_mentsu.pop();
@@ -326,14 +355,8 @@ pub fn koutsu_point(
     shuntsu_num: i32,
     koutsu_pos: usize,
     shuntsu_pos: usize,
+    diff: i32,
 ) -> f64 {
-    let mut diff = 0;
-    for (i, &count) in current_counts.iter().enumerate().take(34) {
-        if count > ctx.hand_counts[i] {
-            diff += (count - ctx.hand_counts[i]) as i32;
-        }
-    }
-
     if diff > ctx.shanten_base + 2 || diff >= 7 {
         return 0.0;
     }
@@ -365,6 +388,13 @@ pub fn koutsu_point(
             let m = Mentsu::new(&[p, p, p, dummy], 3, MentsuType::TYPE_KOUTSU);
             current_mentsu.push(m);
 
+            let mut added_diff = 0;
+            for k in 1..=3 {
+                if current_counts[i] + k > ctx.hand_counts[i] {
+                    added_diff += 1;
+                }
+            }
+
             if koutsu_num - 1 > 0 {
                 ret += koutsu_point(
                     ctx,
@@ -374,6 +404,7 @@ pub fn koutsu_point(
                     shuntsu_num,
                     i + 1,
                     shuntsu_pos,
+                    diff + added_diff,
                 );
             } else {
                 ret += shuntsu_point(
@@ -384,6 +415,7 @@ pub fn koutsu_point(
                     shuntsu_num,
                     i + 1,
                     shuntsu_pos,
+                    diff + added_diff,
                 );
             }
 

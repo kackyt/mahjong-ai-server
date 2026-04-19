@@ -5,6 +5,8 @@ use itertools::Itertools;
 use mahjong_core::mahjong_generated::open_mahjong::GameStateT;
 use mahjong_core::shanten::PaiState;
 use rayon::prelude::*;
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 fn calculate_nokori_sum(wrapper: &AIStateWrapper) -> f64 {
     wrapper.nokorihai.iter().sum()
@@ -83,6 +85,7 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
                 shanten_base: shanten,
                 nokori_sum,
                 hand_counts,
+                machi_cache: RefCell::new(HashMap::new()),
             };
 
             let mut total_score = 0.0;
@@ -95,9 +98,9 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
                     let mut current_mentsu = Vec::new();
 
                     let score = if k > 0 {
-                        koutsu_point(&ctx, &mut current_counts, &mut current_mentsu, k, s, 0, 0)
+                        koutsu_point(&ctx, &mut current_counts, &mut current_mentsu, k, s, 0, 0, 0)
                     } else {
-                        shuntsu_point(&ctx, &mut current_counts, &mut current_mentsu, 0, s, 0, 0)
+                        shuntsu_point(&ctx, &mut current_counts, &mut current_mentsu, 0, s, 0, 0, 0)
                     };
                     total_score += score;
                 }
