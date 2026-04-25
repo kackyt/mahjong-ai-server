@@ -675,7 +675,7 @@ impl Application for App {
                         .take(4)
                         .map(|(i, p)| (i, p.score))
                         .collect();
-                    scores.sort_by(|a, b| b.1.cmp(&a.1));
+                    scores.sort_by_key(|b| std::cmp::Reverse(b.1));
 
                     // Oka
                     // オカを1位に加算（実スコアを更新し、表示用もそれに合わせる）

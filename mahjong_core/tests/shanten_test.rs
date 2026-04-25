@@ -43,14 +43,11 @@ fn parse_testcase(path: &Path) -> io::Result<Vec<(Vec<PaiT>, i32)>> {
 fn calc_hon_shanten_test() -> Result<(), Error> {
     let filepath = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/p_hon_10000.txt");
     let case1 = parse_testcase(&filepath)?;
-    let mut lines = 1;
-
-    for case in case1 {
+    for (lines, case) in (1..).zip(case1) {
         let mut state = PaiState::from(&case.0);
         println!("case {}", lines);
 
         assert_eq!(state.get_shanten(0), case.1);
-        lines += 1;
     }
 
     Ok(())

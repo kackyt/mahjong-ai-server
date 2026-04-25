@@ -1,22 +1,25 @@
 use crate::score::{chiitoi_point, koutsu_point, shuntsu_point, SearchContext};
 use crate::state::AIStateWrapper;
 use anyhow::Result;
+use dashmap::DashMap;
 use itertools::Itertools;
 use mahjong_core::mahjong_generated::open_mahjong::GameStateT;
 use mahjong_core::shanten::PaiState;
 use rayon::prelude::*;
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::sync::Arc;
 
+/// 残り牌の合計を計算
 fn calculate_nokori_sum(wrapper: &AIStateWrapper) -> f64 {
     wrapper.nokorihai.iter().sum()
 }
 
+/// 捨て牌の評価
+/// 各候補牌について、捨てた場合の期待値を並列に計算し、最も高い期待値の牌を選択
 pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
     let wrapper = AIStateWrapper::new(game_state);
     let myself = &game_state.players[game_state.teban as usize];
 
-    // Collect candidates (unique pai_num)
+    // 候補牌の収集（重複除外）
     let mut candidates: Vec<usize> = myself
         .tehai
         .iter()
@@ -32,32 +35,10 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
     let unique_candidates: Vec<usize> = candidates.into_iter().unique().collect();
     let nokori_sum = calculate_nokori_sum(&wrapper);
 
+    // 各候補牌の評価を並列実行（rayon）
     let results: Vec<(usize, f64)> = unique_candidates
         .par_iter()
         .map(|&pai| {
-            // Check danger
-            // If pai is dangerous, penalize.
-            // MJ0 returns kikenhai array.
-            // Safety penalty?
-            // MahjongAIType4 usually balances attack/defense.
-            // But evalSutehaiSub in C++ only returns attack score (sum of probabilities * score).
-            // It subtracts penalty? Or is it pure attack?
-            // C++: "sum += tparam[i].ret;"
-            // tparam[i].ret is result of koutsupoint/shuntsupoint.
-            // These functions calculate "probability * score".
-            // They also use "calcMachiCoef".
-
-            // Where is defense?
-            // MJ0 provides kikenhai.
-            // Type4 seems to ignore it in "evalSutehaiSub"?
-            // But maybe "MahjongAIKikenhai" uses it.
-            // The PR comment asked to implement MJ0 for "reading".
-            // It didn't explicitly say "Use reading for defense in Type4".
-            // But it makes sense.
-            // However, sticking to Type4 logic (Attack focused), I will just use MJ0 for probability (nokorihai).
-            // If I want to implement defense, I would subtract (kikenhai[pai] * penalty).
-            // I'll stick to attack optimization using improved wall estimation.
-
             let mut hand_counts = wrapper.my_tehai_counts;
             if hand_counts[pai] > 0 {
                 hand_counts[pai] -= 1;
@@ -80,32 +61,57 @@ pub fn eval_sutehai(game_state: &GameStateT) -> Result<(usize, f64)> {
                 wrapper.game_state.players[wrapper.game_state.teban as usize].mentsu_len as i32;
             let shanten = pstate.get_shanten(n_naki as usize);
 
+            // DashMap を使ったスレッドセーフなキャッシュ
+            let machi_cache = Arc::new(DashMap::new());
+
             let ctx = SearchContext {
                 wrapper: &wrapper,
                 shanten_base: shanten,
                 nokori_sum,
                 hand_counts,
-                machi_cache: RefCell::new(HashMap::new()),
+                machi_cache,
             };
 
             let mut total_score = 0.0;
 
             let needed = 4 - n_naki;
             if needed >= 0 {
+                // 刻子・順子の組み合わせ探索
+                // 各 (k, s) の組み合わせは独立しているため逐次でも十分高速
+                // （外側のpar_iterで候補牌ごとに並列化済み）
                 for k in 0..=needed {
                     let s = needed - k;
                     let mut current_counts = [0u8; 34];
                     let mut current_mentsu = Vec::new();
 
                     let score = if k > 0 {
-                        koutsu_point(&ctx, &mut current_counts, &mut current_mentsu, k, s, 0, 0, 0)
+                        koutsu_point(
+                            &ctx,
+                            &mut current_counts,
+                            &mut current_mentsu,
+                            k,
+                            s,
+                            0,
+                            0,
+                            0,
+                        )
                     } else {
-                        shuntsu_point(&ctx, &mut current_counts, &mut current_mentsu, 0, s, 0, 0, 0)
+                        shuntsu_point(
+                            &ctx,
+                            &mut current_counts,
+                            &mut current_mentsu,
+                            0,
+                            s,
+                            0,
+                            0,
+                            0,
+                        )
                     };
                     total_score += score;
                 }
             }
 
+            // 七対子の評価（門前のみ）
             if n_naki == 0 {
                 let mut current_counts = [0u8; 34];
                 total_score += chiitoi_point(&ctx, &mut current_counts, 0, 0);

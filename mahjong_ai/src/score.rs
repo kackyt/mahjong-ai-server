@@ -1,24 +1,28 @@
 use crate::state::AIStateWrapper;
 use crate::utils::{get_dist_coef, get_kind_coef, paidistance};
+use dashmap::DashMap;
 use mahjong_core::agari::AgariBehavior;
 use mahjong_core::mahjong_generated::open_mahjong::{Mentsu, MentsuFlag, MentsuPai, MentsuType};
 use mahjong_core::shanten::PaiState;
 
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::sync::Arc;
 
+/// 探索コンテキスト
+/// DashMap を使うことでスレッドセーフにキャッシュを共有できる
 #[derive(Clone)]
 pub struct SearchContext<'a> {
     pub wrapper: &'a AIStateWrapper<'a>,
     pub shanten_base: i32,
     pub nokori_sum: f64,
     pub hand_counts: [u8; 34],
-    pub machi_cache: RefCell<HashMap<([u8; 34], usize), f64>>,
+    pub machi_cache: Arc<DashMap<([u8; 34], usize), f64>>,
 }
 
+/// 待ち係数の計算（シャンテン0の受入枚数ベースの評価）
 pub fn calc_machi_coef(ctx: &SearchContext, current_counts: &[u8; 34], machi_hai: usize) -> f64 {
-    if let Some(&cached) = ctx.machi_cache.borrow().get(&(*current_counts, machi_hai)) {
-        return cached;
+    // DashMap でキャッシュを参照（並列安全）
+    if let Some(cached) = ctx.machi_cache.get(&(*current_counts, machi_hai)) {
+        return *cached;
     }
 
     let mut temp_counts = *current_counts;
@@ -48,7 +52,7 @@ pub fn calc_machi_coef(ctx: &SearchContext, current_counts: &[u8; 34], machi_hai
     let kawa_len = player.kawahai_len as usize;
 
     for (i, &count) in temp_counts.iter().enumerate().take(34) {
-        // Optimization: Skip if no tiles remaining in wall
+        // 残り牌がゼロならスキップ
         let avail_in_wall = ctx.wrapper.nokorihai[i];
 
         let used_from_wall = count.saturating_sub(ctx.hand_counts[i]);
@@ -90,8 +94,8 @@ pub fn calc_machi_coef(ctx: &SearchContext, current_counts: &[u8; 34], machi_hai
     if furiten {
         final_ret *= 0.33;
     }
+    // DashMap にキャッシュ挿入（並列安全）
     ctx.machi_cache
-        .borrow_mut()
         .insert((*current_counts, machi_hai), final_ret);
     final_ret
 }
@@ -105,6 +109,8 @@ pub fn calc_score(
     calc_score_inner(ctx, current_counts, mentsu_list, diff)
 }
 
+/// スコア計算の内部実装
+/// 頭候補のフィルタリング強化・確率閾値による早期リターンで高速化
 fn calc_score_inner(
     ctx: &SearchContext,
     current_counts: &mut [u8; 34],
@@ -122,8 +128,13 @@ fn calc_score_inner(
         .collect();
 
     for head_pai in 0..34 {
-        // Optimization: Skip completely useless tiles for head?
+        // 最適化: 手牌にも残り牌にもない牌はスキップ
         if ctx.wrapper.remain_counts[head_pai] == 0 && ctx.hand_counts[head_pai] == 0 {
+            continue;
+        }
+
+        // 最適化: 手牌0枚かつ残り1枚以下 → 頭にする確率が極めて低いためスキップ
+        if ctx.hand_counts[head_pai] == 0 && ctx.wrapper.remain_counts[head_pai] <= 1 {
             continue;
         }
 
@@ -169,83 +180,87 @@ fn calc_score_inner(
             }
         }
 
-        if possible && probability > 0.0 {
-            let head_pai_obj = MentsuPai::new(head_pai as u8, 0, MentsuFlag::FLAG_NONE);
-            let dummy = MentsuPai::default();
-            let head_mentsu = Mentsu::new(
-                &[head_pai_obj, head_pai_obj, dummy, dummy],
-                2,
-                MentsuType::TYPE_ATAMA,
-            );
+        // 最適化: 確率が極めて低い場合は和了判定をスキップ
+        if !possible || probability <= 1e-10 {
+            current_counts[head_pai] -= 2;
+            continue;
+        }
 
-            let mut full_mentsu = mentsu_list.to_owned();
-            full_mentsu.push(head_mentsu);
+        let head_pai_obj = MentsuPai::new(head_pai as u8, 0, MentsuFlag::FLAG_NONE);
+        let dummy = MentsuPai::default();
+        let head_mentsu = Mentsu::new(
+            &[head_pai_obj, head_pai_obj, dummy, dummy],
+            2,
+            MentsuType::TYPE_ATAMA,
+        );
 
-            for (idx, m) in full_mentsu.iter().enumerate() {
-                let first_pai = m.pai_list().get(0).pai_num() as usize;
-                let mut is_machi_candidate = false;
-                let mut machi_hai_candidate = 0;
+        let mut full_mentsu = mentsu_list.to_owned();
+        full_mentsu.push(head_mentsu);
 
-                match m.mentsu_type() {
-                    MentsuType::TYPE_KOUTSU | MentsuType::TYPE_ATAMA
-                        if current_counts[first_pai] > ctx.hand_counts[first_pai] =>
-                    {
+        for (idx, m) in full_mentsu.iter().enumerate() {
+            let first_pai = m.pai_list().get(0).pai_num() as usize;
+            let mut is_machi_candidate = false;
+            let mut machi_hai_candidate = 0;
+
+            match m.mentsu_type() {
+                MentsuType::TYPE_KOUTSU | MentsuType::TYPE_ATAMA
+                    if current_counts[first_pai] > ctx.hand_counts[first_pai] =>
+                {
+                    is_machi_candidate = true;
+                    machi_hai_candidate = first_pai;
+                }
+                MentsuType::TYPE_SHUNTSU => {
+                    if current_counts[first_pai] > ctx.hand_counts[first_pai] {
                         is_machi_candidate = true;
                         machi_hai_candidate = first_pai;
+                    } else if current_counts[first_pai + 1] > ctx.hand_counts[first_pai + 1] {
+                        is_machi_candidate = true;
+                        machi_hai_candidate = first_pai + 1;
+                    } else if current_counts[first_pai + 2] > ctx.hand_counts[first_pai + 2] {
+                        is_machi_candidate = true;
+                        machi_hai_candidate = first_pai + 2;
                     }
-                    MentsuType::TYPE_SHUNTSU => {
-                        if current_counts[first_pai] > ctx.hand_counts[first_pai] {
-                            is_machi_candidate = true;
-                            machi_hai_candidate = first_pai;
-                        } else if current_counts[first_pai + 1] > ctx.hand_counts[first_pai + 1] {
-                            is_machi_candidate = true;
-                            machi_hai_candidate = first_pai + 1;
-                        } else if current_counts[first_pai + 2] > ctx.hand_counts[first_pai + 2] {
-                            is_machi_candidate = true;
-                            machi_hai_candidate = first_pai + 2;
-                        }
-                    }
-                    _ => {}
                 }
+                _ => {}
+            }
 
-                if is_machi_candidate {
-                    let mut test_mentsu = full_mentsu.clone();
-                    let mut m_mod = test_mentsu[idx].unpack();
-                    for p in &mut m_mod.pai_list {
-                        if p.pai_num as usize == machi_hai_candidate {
-                            p.flag = MentsuFlag::FLAG_AGARI;
-                            break;
-                        }
+            if is_machi_candidate {
+                let mut test_mentsu = full_mentsu.clone();
+                let mut m_mod = test_mentsu[idx].unpack();
+                for p in &mut m_mod.pai_list {
+                    if p.pai_num as usize == machi_hai_candidate {
+                        p.flag = MentsuFlag::FLAG_AGARI;
+                        break;
                     }
-                    test_mentsu[idx] = m_mod.pack();
+                }
+                test_mentsu[idx] = m_mod.pack();
 
-                    let agari_state = ctx.wrapper.game_state.get_agari(
-                        ctx.wrapper.game_state.teban as usize,
-                        &test_mentsu,
-                        &open_mentsu,
-                        false,
-                    );
+                let agari_state = ctx.wrapper.game_state.get_agari(
+                    ctx.wrapper.game_state.teban as usize,
+                    &test_mentsu,
+                    &open_mentsu,
+                    false,
+                );
 
-                    let mut yakus = ctx
-                        .wrapper
-                        .game_state
-                        .get_condition_yaku(ctx.wrapper.game_state.teban as usize, &agari_state);
-                    yakus.extend(agari_state.get_yaku_list());
-                    yakus.extend(ctx.wrapper.game_state.get_dora_yaku(
-                        ctx.wrapper.game_state.teban as usize,
-                        &test_mentsu,
-                        &open_mentsu,
-                        0,
-                    ));
+                let mut yakus = ctx
+                    .wrapper
+                    .game_state
+                    .get_condition_yaku(ctx.wrapper.game_state.teban as usize, &agari_state);
+                yakus.extend(agari_state.get_yaku_list());
+                yakus.extend(ctx.wrapper.game_state.get_dora_yaku(
+                    ctx.wrapper.game_state.teban as usize,
+                    &test_mentsu,
+                    &open_mentsu,
+                    0,
+                ));
 
-                    let agari_res = agari_state.get_agari(&yakus);
-                    let score = agari_res.score as f64;
-                    if score > 0.0 {
-                        let machi_coef = calc_machi_coef(ctx, current_counts, machi_hai_candidate);
-                        let term = 0.8 * probability * probability * score + 0.2 * probability * score;
-                        let val = machi_coef * term / (diff as f64).max(1.0);
-                        max_val += val;
-                    }
+                let agari_res = agari_state.get_agari(&yakus);
+                let score = agari_res.score as f64;
+                if score > 0.0 {
+                    let machi_coef = calc_machi_coef(ctx, current_counts, machi_hai_candidate);
+                    let term = 0.8 * probability * probability * score + 0.2 * probability * score;
+                    let val = machi_coef * term / (diff as f64).max(1.0);
+                    max_val += val;
                 }
             }
         }
@@ -277,10 +292,10 @@ pub fn shuntsu_point(
 
     let mut ret = 0.0;
 
-    // Optimization: Skip honors for Shuntsu
+    // 字牌は順子を構成できないためスキップ
     for i in shuntsu_pos..21 {
         let pai = (i / 7) * 9 + (i % 7);
-        // Optimization: Use simple availability check before checking `hand_counts`.
+        // 手牌か残り牌にあるかの簡易チェック
         let p1_ok = ctx.hand_counts[pai] > 0 || ctx.wrapper.remain_counts[pai] > 0;
         let p2_ok = ctx.hand_counts[pai + 1] > 0 || ctx.wrapper.remain_counts[pai + 1] > 0;
         let p3_ok = ctx.hand_counts[pai + 2] > 0 || ctx.wrapper.remain_counts[pai + 2] > 0;
@@ -526,11 +541,8 @@ pub fn chiitoi_point(
     let mut sum = 0.0;
 
     for i in pos..34 {
-        // Optimization: Skip if we have 0 and strictly need 2.
-        // If we have 0, we need to draw 2 specific tiles.
-        // Probability is extremely low.
-        // We prune this branch to speed up.
-        // Only consider tiles where we have >= 1.
+        // 手牌に0枚で2枚引く必要がある場合は確率が極めて低いためスキップ
+        // 1枚以上持っている場合のみ七対子候補として考慮
 
         let have = ctx.hand_counts[i];
         if have >= 2 {
@@ -567,8 +579,8 @@ mod tests {
         game_state.start(&mut play_log);
 
         let mut hand_counts = [0; 34];
-        for i in 0..4 {
-            hand_counts[i] = 3;
+        for item in hand_counts.iter_mut().take(4) {
+            *item = 3;
         }
 
         let wrapper = AIStateWrapper::new(&game_state);
@@ -577,7 +589,7 @@ mod tests {
             shanten_base: 0,
             nokori_sum: wrapper.nokorihai.iter().sum(),
             hand_counts,
-            machi_cache: RefCell::new(HashMap::new()),
+            machi_cache: Arc::new(DashMap::new()),
         };
 
         let mut current_counts = hand_counts;
@@ -607,14 +619,14 @@ mod tests {
             shanten_base: 0,
             nokori_sum: wrapper.nokorihai.iter().sum(),
             hand_counts,
-            machi_cache: RefCell::new(HashMap::new()),
+            machi_cache: Arc::new(DashMap::new()),
         };
         let mut current_counts = [0; 34];
 
         // 1. rest == 0 の場合
         ctx.nokori_sum = 0.0;
-        for i in 0..7 {
-            current_counts[i] = 2;
+        for item in current_counts.iter_mut().take(7) {
+            *item = 2;
         }
         let score = chiitoi_point(&ctx, &mut current_counts, 7, 0);
         assert_eq!(score, 0.0, "rest が 0 の時は chiitoi スコア 0.0 であるべき");
