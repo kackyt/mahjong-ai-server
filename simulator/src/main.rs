@@ -76,38 +76,83 @@ fn run_simulation<W: Write>(
     let mut turn = 0;
 
     loop {
-        // Check for ryuukyoku (exhausted wall) BEFORE draw
-        if game_state.get_taku_cursor() >= game_state.taku.length {
+        // 1. ツモ前の状態評価（流局・和了チェック）
+        // 和了は基本的にはツモ直後に発生するが、天和などの特殊ケースや
+        // ループの整合性のためにここでチェックする。
+        match game_state.evaluate_post_draw_status() {
+            mahjong_core::game_process::PostDrawAction::Ryuukyoku => {
+                let current_player = game_state.teban as usize;
+                let player = &game_state.players[current_player];
+                let tehai_nums: Vec<u8> = player.tehai[..player.tehai_len as usize]
+                    .iter()
+                    .map(|p| p.pai_num)
+                    .collect();
+                let mut state = PaiState::from(&player.tehai[..player.tehai_len as usize]);
+                let shanten = state.get_shanten(player.mentsu_len as usize);
+
+                let log_json = serde_json::to_string(&ActionLog {
+                    turn,
+                    player_idx: current_player,
+                    tehai: tehai_nums,
+                    tsumohai: 255,
+                    shanten,
+                    discard: 255,
+                    action_type: "RYUUKYOKU".to_string(),
+                })?;
+                writeln!(log_file, "{}", log_json)?;
+                break;
+            }
+            mahjong_core::game_process::PostDrawAction::TsumoAgari => {
+                let current_player = game_state.teban as usize;
+                let player = &game_state.players[current_player];
+                let tehai_nums: Vec<u8> = player.tehai[..player.tehai_len as usize]
+                    .iter()
+                    .map(|p| p.pai_num)
+                    .collect();
+
+                let log_json = serde_json::to_string(&ActionLog {
+                    turn,
+                    player_idx: current_player,
+                    tehai: tehai_nums,
+                    tsumohai: player.tsumohai.pai_num,
+                    shanten: -1,
+                    discard: player.tsumohai.pai_num,
+                    action_type: "TSUMO_AGARI".to_string(),
+                })?;
+                writeln!(log_file, "{}", log_json)?;
+                break;
+            }
+            _ => {}
+        }
+
+        // 2. ツモ
+        game_state.tsumo(play_log)?;
+
+        // 3. ツモ直後の和了チェック
+        if game_state.evaluate_post_draw_status()
+            == mahjong_core::game_process::PostDrawAction::TsumoAgari
+        {
             let current_player = game_state.teban as usize;
             let player = &game_state.players[current_player];
             let tehai_nums: Vec<u8> = player.tehai[..player.tehai_len as usize]
                 .iter()
                 .map(|p| p.pai_num)
                 .collect();
-            // シャンテン計算はログ出力用なのでエンジン側への集約対象外とするが、
-            // 可能ならエンジン側のヘルパーを使うように検討する。
-            // ここでは指摘に従い直接的な参照を減らすため shanten 計算は一旦そのまま残すが、
-            // 和了判定などは集約する。
-            let mut state = PaiState::from(&player.tehai[..player.tehai_len as usize]);
-            let shanten = state.get_shanten(player.mentsu_len as usize);
 
             let log_json = serde_json::to_string(&ActionLog {
                 turn,
                 player_idx: current_player,
                 tehai: tehai_nums,
-                tsumohai: 255, // dummy
-                shanten,
-                discard: 255, // dummy
-                action_type: "RYUUKYOKU".to_string(),
+                tsumohai: player.tsumohai.pai_num,
+                shanten: -1,
+                discard: player.tsumohai.pai_num,
+                action_type: "TSUMO_AGARI".to_string(),
             })?;
             writeln!(log_file, "{}", log_json)?;
             break;
         }
 
         let current_player = game_state.teban as usize;
-
-        // Next player draw
-        game_state.tsumo(play_log)?;
 
         let player = &game_state.players[current_player];
 
@@ -120,21 +165,6 @@ fn run_simulation<W: Write>(
         let tehai_nums: Vec<u8> = tehai.iter().map(|p| p.pai_num).collect();
 
         tehai.push(player.tsumohai.clone());
-
-        // Check for agari
-        if game_state.check_tsumo_agari() {
-            let log_json = serde_json::to_string(&ActionLog {
-                turn,
-                player_idx: current_player,
-                tehai: tehai_nums.clone(),
-                tsumohai: player.tsumohai.pai_num,
-                shanten: -1,
-                discard: player.tsumohai.pai_num,
-                action_type: "TSUMO_AGARI".to_string(),
-            })?;
-            writeln!(log_file, "{}", log_json)?;
-            break;
-        }
 
         // Use mahjong_ai to decide the discard
         let best_discard = match eval_sutehai(game_state) {
@@ -221,6 +251,8 @@ mod tests {
         let mut play_log = PlayLog::new();
         game_state.create(b"test", 1, &mut play_log);
         game_state.shuffle();
+        // 重複なしモード（taku_cursol を使用）に設定
+        game_state.is_non_duplicate = true;
         game_state.start(&mut play_log);
 
         // 山を最後まで進める
@@ -250,10 +282,10 @@ mod tests {
             16, // 5m
         ];
         let mut full_wall = vec![0u32; 136];
-        full_wall[..tehai_ids.len()].copy_from_slice(&tehai_ids);
-        // 次に引く牌をアガリ牌(5m)にする
-        // 配牌13枚 + 1枚(ツモ)
-        full_wall[13] = 17; // 5m
+        // 1プレイヤーの場合、配牌はインデックス 14 から始まる
+        full_wall[14..14 + tehai_ids.len()].copy_from_slice(&tehai_ids);
+        // 次に引く牌（ツモ）はインデックス 27
+        full_wall[27] = 17; // 5m (ID 16-19 は 5m)
 
         game_state.load(&full_wall);
         game_state.start(&mut play_log);

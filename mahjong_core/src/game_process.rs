@@ -15,6 +15,13 @@ use rand::seq::SliceRandom;
 use thiserror::Error;
 use uuid::Uuid;
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum PostDrawAction {
+    TsumoAgari,
+    Ryuukyoku,
+    Nothing,
+}
+
 #[derive(Error, Debug)]
 pub enum GameProcessError {
     #[error("リーチ後はツモ切りのみです")]
@@ -256,8 +263,9 @@ impl GameStateT {
         }
     }
 
-    /// 現在の手番プレイヤーがツモ和了しているかどうかを判定します。
-    pub fn check_tsumo_agari(&self) -> bool {
+    /// 現在の手番プレイヤーがツモ和了の形（4面子1雀頭など）になっているか判定します。
+    /// 役の有無は考慮しません。
+    pub fn is_tsumo_agari_form(&self) -> bool {
         let player = &self.players[self.teban as usize];
         if !player.is_tsumo {
             return false;
@@ -266,6 +274,56 @@ impl GameStateT {
         tehai.push(player.tsumohai.clone());
         let shanten = PaiState::from(&tehai).get_shanten(player.mentsu_len as usize);
         shanten == -1
+    }
+
+    /// 現在のプレイヤーがツモ和了した場合のスコアを計算します。
+    /// 和了していない場合や役がない場合は 0 を返します。
+    pub fn evaluate_tsumo_agari_score(&self) -> i32 {
+        let player = &self.players[self.teban as usize];
+        if !player.is_tsumo {
+            return 0;
+        }
+        let mut tehai: Vec<PaiT> = player.tehai[..player.tehai_len as usize].to_vec();
+        tehai.push(player.tsumohai.clone());
+
+        let mut state = PaiState::from(&tehai);
+        let fulo: Vec<crate::mahjong_generated::open_mahjong::Mentsu> = player.mentsu
+            [0..player.mentsu_len as usize]
+            .iter()
+            .map(|m| m.pack())
+            .collect();
+
+        let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
+        if fulo.is_empty() {
+            all_mentsu.extend(all_of_chiitoitsu(&state));
+        }
+        let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &player.tsumohai.pack());
+
+        if all_mentsu_w_machi.is_empty() {
+            return 0;
+        }
+
+        let best_agari =
+            self.get_best_agari(self.teban as usize, &all_mentsu_w_machi, &fulo, 0, false);
+        match best_agari {
+            Ok(agari) => agari.score,
+            Err(_) => 0,
+        }
+    }
+
+    /// ツモ直後の状態を評価し、和了、流局、または継続を判定します。
+    pub fn evaluate_post_draw_status(&self) -> PostDrawAction {
+        // 1. 和了判定 (形 + 役)
+        if self.evaluate_tsumo_agari_score() > 0 {
+            return PostDrawAction::TsumoAgari;
+        }
+
+        // 2. 流局判定
+        if self.get_taku_cursor() >= self.taku.length {
+            return PostDrawAction::Ryuukyoku;
+        }
+
+        PostDrawAction::Nothing
     }
 
     /// ツモを行います。

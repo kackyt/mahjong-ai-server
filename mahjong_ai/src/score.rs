@@ -409,15 +409,10 @@ pub fn koutsu_point(
             // 仮定してk枚追加した場合に hand_counts を超えるかを確認する。
             // この計算は意図的に保守的（大きめ）にすることで
             // 枝刈りを積極的に働かせる設計になっている。
-            let added_diff = {
-                let have = ctx.hand_counts[i];
-                let mut d = 0i32;
-                for k in 1u8..=3 {
-                    if current_counts[i] + k > have {
-                        d += 1;
-                    }
-                }
-                d
+            let added_diff = if current_counts[i] > ctx.hand_counts[i] {
+                (current_counts[i] - ctx.hand_counts[i]) as i32
+            } else {
+                0
             };
 
             if koutsu_num - 1 > 0 {
@@ -583,26 +578,56 @@ mod tests {
             *item = 3;
         }
 
-        let wrapper = AIStateWrapper::new(&game_state);
-        let mut ctx = SearchContext {
-            wrapper: &wrapper,
-            shanten_base: 0,
-            nokori_sum: wrapper.nokorihai.iter().sum(),
-            hand_counts,
-            machi_cache: Arc::new(DashMap::new()),
-        };
-
-        let mut current_counts = hand_counts;
+        let mut wrapper = AIStateWrapper::new(&game_state);
         let mentsu_list = Vec::new();
 
         // 1. rest == 0 の場合 (nokori_sum = 0)
-        ctx.nokori_sum = 0.0;
-        let score = calc_score(&ctx, &mut current_counts, &mentsu_list, 0);
-        assert_eq!(score, 0.0, "nokori_sum が 0 の時はスコア 0.0 であるべき");
+        {
+            let ctx = SearchContext {
+                wrapper: &wrapper,
+                shanten_base: 0,
+                nokori_sum: 0.0,
+                hand_counts,
+                machi_cache: Arc::new(DashMap::new()),
+            };
+            let mut current_counts = hand_counts;
+            let score = calc_score(&ctx, &mut current_counts, &mentsu_list, 0);
+            assert_eq!(score, 0.0, "nokori_sum が 0 の時はスコア 0.0 であるべき");
+        }
 
-        // 2. remain_counts 不足ケースは AIStateWrapper の構造上、
-        // 直接書き換えが難しいため、将来的な課題とする。
-        // （nokori_sum == 0 のケースで早期終了パスはカバーできている）
+        // 2. rest < 0 の場合 (通常は発生しないが、ロジックとして検証)
+        {
+            let ctx = SearchContext {
+                wrapper: &wrapper,
+                shanten_base: 0,
+                nokori_sum: -1.0,
+                hand_counts,
+                machi_cache: Arc::new(DashMap::new()),
+            };
+            let mut current_counts = hand_counts;
+            let score = calc_score(&ctx, &mut current_counts, &mentsu_list, 0);
+            assert_eq!(score, 0.0, "nokori_sum が負の時はスコア 0.0 であるべき");
+        }
+
+        // 3. remain_counts 不足ケース
+        {
+            for i in 0..34 {
+                wrapper.remain_counts[i] = 0;
+            }
+            let ctx = SearchContext {
+                wrapper: &wrapper,
+                shanten_base: 0,
+                nokori_sum: 100.0,
+                hand_counts,
+                machi_cache: Arc::new(DashMap::new()),
+            };
+            let mut current_counts = [0; 34];
+            let score = calc_score(&ctx, &mut current_counts, &mentsu_list, 0);
+            assert_eq!(
+                score, 0.0,
+                "remain_counts がすべて 0 の時はスコア 0.0 であるべき"
+            );
+        }
     }
 
     #[test]
@@ -613,22 +638,45 @@ mod tests {
         game_state.start(&mut play_log);
 
         let hand_counts = [0; 34];
-        let wrapper = AIStateWrapper::new(&game_state);
-        let mut ctx = SearchContext {
-            wrapper: &wrapper,
-            shanten_base: 0,
-            nokori_sum: wrapper.nokorihai.iter().sum(),
-            hand_counts,
-            machi_cache: Arc::new(DashMap::new()),
-        };
-        let mut current_counts = [0; 34];
+        let mut wrapper = AIStateWrapper::new(&game_state);
 
         // 1. rest == 0 の場合
-        ctx.nokori_sum = 0.0;
-        for item in current_counts.iter_mut().take(7) {
-            *item = 2;
+        {
+            let ctx = SearchContext {
+                wrapper: &wrapper,
+                shanten_base: 0,
+                nokori_sum: 0.0,
+                hand_counts,
+                machi_cache: Arc::new(DashMap::new()),
+            };
+            let mut current_counts = [0; 34];
+            for item in current_counts.iter_mut().take(7) {
+                *item = 2;
+            }
+            let score = chiitoi_point(&ctx, &mut current_counts, 7, 0);
+            assert_eq!(score, 0.0, "rest が 0 の時は chiitoi スコア 0.0 であるべき");
         }
-        let score = chiitoi_point(&ctx, &mut current_counts, 7, 0);
-        assert_eq!(score, 0.0, "rest が 0 の時は chiitoi スコア 0.0 であるべき");
+
+        // 2. probability == 0.0 のケース
+        {
+            for i in 0..34 {
+                wrapper.remain_counts[i] = 0;
+                wrapper.nokorihai[i] = 0.0;
+            }
+            let ctx = SearchContext {
+                wrapper: &wrapper,
+                shanten_base: 0,
+                nokori_sum: 100.0,
+                hand_counts,
+                machi_cache: Arc::new(DashMap::new()),
+            };
+            let mut current_counts = [0; 34];
+            current_counts[0] = 2;
+            let score = chiitoi_point(&ctx, &mut current_counts, 7, 0);
+            assert_eq!(
+                score, 0.0,
+                "牌が足りない場合は chiitoi スコア 0.0 であるべき"
+            );
+        }
     }
 }

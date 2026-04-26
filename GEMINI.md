@@ -168,6 +168,4 @@ GitHub Flowを採用する
 simulatorはAIを評価、比較するために使用する自己対戦を行うツールです。
 重い処理が動くため、必ずreleaseモードでビルドしてください。
 
-```bash
-cargo build --release --bin simulator
-```
+    cargo build --release --bin simulator
