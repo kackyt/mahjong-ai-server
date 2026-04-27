@@ -15,6 +15,9 @@ pub struct SearchContext<'a> {
     pub shanten_base: i32,
     pub nokori_sum: f64,
     pub hand_counts: [u8; 34],
+    /// 待ち係数のキャッシュ。
+    /// このキャッシュは1つの候補牌評価（SearchContext）の生存期間内でのみ有効であり、
+    /// その間 teban, mentsu_len, kawahai などのゲーム状態が不変であることを前提としています。
     pub machi_cache: Arc<DashMap<([u8; 34], usize), f64>>,
 }
 

@@ -188,7 +188,12 @@ fn run_simulation<W: Write>(
                 .iter()
                 .take(player.tehai_len as usize)
                 .position(|p| p.pai_num as u32 == best_discard);
-            idx.unwrap_or(0)
+            idx.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "eval_sutehai returned tile {} not present in tehai/tsumohai",
+                    best_discard
+                )
+            })?
         };
 
         let discard_action = if is_tsumogiri {
