@@ -89,7 +89,7 @@ fn build_suit_lut(table: &mut Vec<[(i32, i32, i32); 2]>, hai: &mut [i32; 9], pos
 }
 
 /// LUTを参照する高速版 mentsu_count（公開API）
-pub fn mentsu_count(hai_count: &mut [i32; 9], _n: usize) -> [(i32, i32, i32); 2] {
+pub fn mentsu_count(hai_count: &mut [i32; 9]) -> [(i32, i32, i32); 2] {
     let lut = get_suit_lut();
     let idx = encode_suit(hai_count);
     lut[idx]
@@ -422,9 +422,9 @@ impl PaiState {
     }
 
     fn get_shanten_case(&mut self, b_atama: bool, n_fulo: usize) -> i32 {
-        let m = mentsu_count(&mut self.hai_count_m, 0);
-        let p = mentsu_count(&mut self.hai_count_p, 0);
-        let s = mentsu_count(&mut self.hai_count_s, 0);
+        let m = mentsu_count(&mut self.hai_count_m);
+        let p = mentsu_count(&mut self.hai_count_p);
+        let s = mentsu_count(&mut self.hai_count_s);
         let mut z = (0, 0, 0);
 
         for n in 0..7 {
@@ -601,6 +601,56 @@ impl PaiState {
         }
 
         min_shanten
+    }
+
+    pub fn is_kokushi_agari(&self) -> bool {
+        self.get_kokushi_shanten() == -1
+    }
+}
+
+pub fn all_of_kokushi(pai_state: &PaiState) -> Vec<Vec<Mentsu>> {
+    if !pai_state.is_kokushi_agari() {
+        return vec![];
+    }
+
+    let mut vector = Vec::new();
+    let yaochu_indices = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33]; // Man 1,9, Pin 1,9, Sou 1,9, Zihai 1-7
+
+    for &idx in &yaochu_indices {
+        let count = if idx < 9 {
+            pai_state.hai_count_m[idx]
+        } else if idx < 18 {
+            pai_state.hai_count_p[idx - 9]
+        } else if idx < 27 {
+            pai_state.hai_count_s[idx - 18]
+        } else {
+            pai_state.hai_count_z[idx - 27]
+        };
+
+        if count >= 1 {
+            let m_type = if count >= 2 {
+                MentsuType::TYPE_ATAMA
+            } else {
+                MentsuType::TYPE_KOUTSU // Dummy type for single tile in Kokushi
+            };
+            let m = Mentsu::new(
+                &[
+                    MentsuPai::new(idx as u8, 0, MentsuFlag::FLAG_NONE),
+                    MentsuPai::new(idx as u8, 0, MentsuFlag::FLAG_NONE),
+                    MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
+                    MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
+                ],
+                count as u32,
+                m_type,
+            );
+            vector.push(m);
+        }
+    }
+
+    if vector.len() == 13 {
+        vec![vector]
+    } else {
+        vec![]
     }
 }
 

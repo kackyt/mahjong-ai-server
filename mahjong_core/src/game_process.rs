@@ -6,7 +6,7 @@ use crate::{
         TakuT,
     },
     play_log::PlayLog,
-    shanten::{all_of_chiitoitsu, all_of_mentsu, PaiState},
+    shanten::{all_of_chiitoitsu, all_of_kokushi, all_of_mentsu, PaiState},
 };
 use anyhow::{bail, ensure};
 use chrono::Utc;
@@ -296,6 +296,7 @@ impl GameStateT {
         let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
         if fulo.is_empty() {
             all_mentsu.extend(all_of_chiitoitsu(&state));
+            all_mentsu.extend(all_of_kokushi(&state));
         }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &player.tsumohai.pack());
 
@@ -488,6 +489,7 @@ impl GameStateT {
         let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
         if fulo.is_empty() {
             all_mentsu.extend(all_of_chiitoitsu(&state));
+            all_mentsu.extend(all_of_kokushi(&state));
         }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &player.tsumohai.pack());
 
@@ -599,6 +601,7 @@ impl GameStateT {
         let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
         if fulo.is_empty() {
             all_mentsu.extend(all_of_chiitoitsu(&state));
+            all_mentsu.extend(all_of_kokushi(&state));
         }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &pai.pack());
 
@@ -693,6 +696,7 @@ impl GameStateT {
         let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
         if fulo.is_empty() {
             all_mentsu.extend(all_of_chiitoitsu(&state));
+            all_mentsu.extend(all_of_kokushi(&state));
         }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &pai.pack());
 

@@ -222,6 +222,20 @@ impl AgariBehavior for GameStateT {
             agari.menzen = false;
         }
 
+        // 国士無双の判定
+        if mentsu.len() == 13 && fulo.is_empty() {
+            agari.kokushi = true;
+            agari.fu = 0;
+            // 13面待ちの判定: あがり牌が雀頭（ペア）を構成している場合
+            if mentsu
+                .iter()
+                .any(|m| m.mentsu_type() == MentsuType::TYPE_ATAMA && is_tanki(m))
+            {
+                agari.tanki = true;
+            }
+            return agari;
+        }
+
         for item in mentsu {
             match item.mentsu_type() {
                 MentsuType::TYPE_ATAMA => {
