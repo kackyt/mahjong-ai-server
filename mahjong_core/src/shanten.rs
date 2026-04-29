@@ -90,6 +90,16 @@ fn build_suit_lut(table: &mut Vec<[(i32, i32, i32); 2]>, hai: &mut [i32; 9], pos
 
 /// LUTを参照する高速版 mentsu_count（公開API）
 pub fn mentsu_count(hai_count: &mut [i32; 9]) -> [(i32, i32, i32); 2] {
+    debug_assert!(
+        hai_count.iter().all(|&c| (0..=4).contains(&c)),
+        "Invalid tile count: {:?}",
+        hai_count
+    );
+    debug_assert!(
+        hai_count.iter().sum::<i32>() <= 14,
+        "Total tile count exceeds 14: {:?}",
+        hai_count
+    );
     let lut = get_suit_lut();
     let idx = encode_suit(hai_count);
     lut[idx]
@@ -712,10 +722,148 @@ impl PaiT {
             return false;
         }
 
-        if num >= 33 {
+        if num >= 34 {
             return false;
         }
 
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mentsu_count_consistency() {
+        // LUTと生の実装が一致することを確認
+        let mut test_cases = [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [3, 0, 0, 0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [4, 0, 0, 0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [2, 2, 2, 2, 2, 2, 2, 0, 0],
+        ];
+
+        for hai in test_cases.iter_mut() {
+            let lut_res = mentsu_count(hai);
+            let raw_res = mentsu_count_raw(hai, 0);
+            assert_eq!(lut_res, raw_res, "Consistency failed for {:?}", hai);
+        }
+    }
+
+    #[test]
+    fn test_kokushi_shanten() {
+        // 国士無双 13面待ち (14枚)
+        let mut state = PaiState::default();
+        let yaochu = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33];
+        for &p in &yaochu {
+            state.append(&PaiT {
+                pai_num: p,
+                id: 0,
+                is_nakare: false,
+                is_riichi: false,
+                is_tsumogiri: false,
+            });
+        }
+        // あと1枚何か足す (1m)
+        state.append(&PaiT {
+            pai_num: 0,
+            id: 1,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        assert_eq!(state.get_kokushi_shanten(), -1);
+        assert!(state.is_kokushi_agari());
+
+        // 国士無双 1面待ち (13枚)
+        let mut state = PaiState::default();
+        for &p in yaochu.iter().take(11) {
+            state.append(&PaiT {
+                pai_num: p,
+                id: 0,
+                is_nakare: false,
+                is_riichi: false,
+                is_tsumogiri: false,
+            });
+        }
+        // 中を2枚にする
+        state.append(&PaiT {
+            pai_num: 33,
+            id: 0,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        state.append(&PaiT {
+            pai_num: 33,
+            id: 1,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        // 13種類のうち11種類+中(2枚) = 12種類。あと1種類足りないので0シャンテン（テンパイ）。
+        assert_eq!(state.get_kokushi_shanten(), 0);
+    }
+
+    #[test]
+    fn test_standard_shanten() {
+        // 清一色 テンパイ
+        let mut state = PaiState::default();
+        for i in 0..3 {
+            state.append(&PaiT {
+                pai_num: 0,
+                id: i as u8,
+                is_nakare: false,
+                is_riichi: false,
+                is_tsumogiri: false,
+            });
+            state.append(&PaiT {
+                pai_num: 1,
+                id: i as u8,
+                is_nakare: false,
+                is_riichi: false,
+                is_tsumogiri: false,
+            });
+            state.append(&PaiT {
+                pai_num: 2,
+                id: i as u8,
+                is_nakare: false,
+                is_riichi: false,
+                is_tsumogiri: false,
+            });
+        }
+        state.append(&PaiT {
+            pai_num: 3,
+            id: 0,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        state.append(&PaiT {
+            pai_num: 4,
+            id: 0,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        state.append(&PaiT {
+            pai_num: 5,
+            id: 0,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        state.append(&PaiT {
+            pai_num: 6,
+            id: 0,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+
+        assert_eq!(state.get_standard_shanten(0), 0);
     }
 }

@@ -319,7 +319,17 @@ impl GameStateT {
             return PostDrawAction::TsumoAgari;
         }
 
-        // 2. 流局判定
+        // 2. 国士無双のツモ判定（evaluate_tsumo_agari_scoreで漏れる可能性の補填）
+        let player = &self.players[self.teban as usize];
+        if player.is_tsumo && player.mentsu_len == 0 {
+            let mut tehai = player.tehai[..player.tehai_len as usize].to_vec();
+            tehai.push(player.tsumohai.clone());
+            if PaiState::from(&tehai).is_kokushi_agari() {
+                return PostDrawAction::TsumoAgari;
+            }
+        }
+
+        // 3. 流局判定
         if self.get_taku_cursor() >= self.taku.length {
             return PostDrawAction::Ryuukyoku;
         }
