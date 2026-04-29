@@ -1,4 +1,4 @@
-﻿use mahjong_core::{mahjong_generated::open_mahjong::PaiT, shanten::PaiState};
+use mahjong_core::{mahjong_generated::open_mahjong::PaiT, shanten::PaiState};
 use std::{
     fs::File,
     io::{self, BufRead, BufReader, Error},
@@ -94,4 +94,3 @@ fn calc_tin_shanten_test() -> Result<(), Error> {
 
     Ok(())
 }
-
