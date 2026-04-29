@@ -6,7 +6,7 @@ use crate::{
         TakuT,
     },
     play_log::PlayLog,
-    shanten::{all_of_chiitoitsu, all_of_mentsu, PaiState},
+    shanten::{all_of_chiitoitsu, all_of_kokushi, all_of_mentsu, PaiState},
 };
 use anyhow::{bail, ensure};
 use chrono::Utc;
@@ -14,6 +14,13 @@ use itertools::Itertools;
 use rand::seq::SliceRandom;
 use thiserror::Error;
 use uuid::Uuid;
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PostDrawAction {
+    TsumoAgari,
+    Ryuukyoku,
+    Nothing,
+}
 
 #[derive(Error, Debug)]
 pub enum GameProcessError {
@@ -247,6 +254,89 @@ impl GameStateT {
         self.players[index].clone()
     }
 
+    /// 現在の有効な山カーソルを取得します（重複山モードに対応）。
+    pub fn get_taku_cursor(&self) -> u32 {
+        if self.is_non_duplicate {
+            self.taku_cursol
+        } else {
+            self.players[self.teban as usize].cursol
+        }
+    }
+
+    /// 現在の手番プレイヤーがツモ和了の形（4面子1雀頭など）になっているか判定します。
+    /// 役の有無は考慮しません。
+    pub fn is_tsumo_agari_form(&self) -> bool {
+        let player = &self.players[self.teban as usize];
+        if !player.is_tsumo {
+            return false;
+        }
+        let mut tehai: Vec<PaiT> = player.tehai[..player.tehai_len as usize].to_vec();
+        tehai.push(player.tsumohai.clone());
+        let shanten = PaiState::from(&tehai).get_shanten(player.mentsu_len as usize);
+        shanten == -1
+    }
+
+    /// 現在のプレイヤーがツモ和了した場合のスコアを計算します。
+    /// 和了していない場合や役がない場合は 0 を返します。
+    pub fn evaluate_tsumo_agari_score(&self) -> i32 {
+        let player = &self.players[self.teban as usize];
+        if !player.is_tsumo {
+            return 0;
+        }
+        let mut tehai: Vec<PaiT> = player.tehai[..player.tehai_len as usize].to_vec();
+        tehai.push(player.tsumohai.clone());
+
+        let mut state = PaiState::from(&tehai);
+        let fulo: Vec<crate::mahjong_generated::open_mahjong::Mentsu> = player.mentsu
+            [0..player.mentsu_len as usize]
+            .iter()
+            .map(|m| m.pack())
+            .collect();
+
+        let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
+        if fulo.is_empty() {
+            all_mentsu.extend(all_of_chiitoitsu(&state));
+            all_mentsu.extend(all_of_kokushi(&state));
+        }
+        let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &player.tsumohai.pack());
+
+        if all_mentsu_w_machi.is_empty() {
+            return 0;
+        }
+
+        let best_agari =
+            self.get_best_agari(self.teban as usize, &all_mentsu_w_machi, &fulo, 0, false);
+        match best_agari {
+            Ok(agari) => agari.score,
+            Err(_) => 0,
+        }
+    }
+
+    /// ツモ直後の状態を評価し、和了、流局、または継続を判定します。
+    pub fn evaluate_post_draw_status(&self) -> PostDrawAction {
+        // 1. 和了判定 (形 + 役)
+        if self.evaluate_tsumo_agari_score() > 0 {
+            return PostDrawAction::TsumoAgari;
+        }
+
+        // 2. 国士無双のツモ判定（evaluate_tsumo_agari_scoreで漏れる可能性の補填）
+        let player = &self.players[self.teban as usize];
+        if player.is_tsumo && player.mentsu_len == 0 {
+            let mut tehai = player.tehai[..player.tehai_len as usize].to_vec();
+            tehai.push(player.tsumohai.clone());
+            if PaiState::from(&tehai).is_kokushi_agari() {
+                return PostDrawAction::TsumoAgari;
+            }
+        }
+
+        // 3. 流局判定
+        if self.get_taku_cursor() >= self.taku.length {
+            return PostDrawAction::Ryuukyoku;
+        }
+
+        PostDrawAction::Nothing
+    }
+
     /// ツモを行います。
     #[cfg(feature = "ecs")]
     pub fn tsumo(&mut self, play_log: &mut PlayLog) -> Result<(), GameProcessError> {
@@ -409,6 +499,7 @@ impl GameStateT {
         let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
         if fulo.is_empty() {
             all_mentsu.extend(all_of_chiitoitsu(&state));
+            all_mentsu.extend(all_of_kokushi(&state));
         }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &player.tsumohai.pack());
 
@@ -520,6 +611,7 @@ impl GameStateT {
         let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
         if fulo.is_empty() {
             all_mentsu.extend(all_of_chiitoitsu(&state));
+            all_mentsu.extend(all_of_kokushi(&state));
         }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &pai.pack());
 
@@ -614,6 +706,7 @@ impl GameStateT {
         let mut all_mentsu = all_of_mentsu(&mut state, fulo.len());
         if fulo.is_empty() {
             all_mentsu.extend(all_of_chiitoitsu(&state));
+            all_mentsu.extend(all_of_kokushi(&state));
         }
         let all_mentsu_w_machi = add_machi_to_mentsu(&all_mentsu, &pai.pack());
 

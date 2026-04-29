@@ -1,0 +1,15 @@
+[package]
+name = "simulator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.79"
+clap = { version = "4.4.18", features = ["derive"] }
+mahjong_core = { path = "../mahjong_core", features = ["load-pailist"] }
+mahjong_ai = { path = "../mahjong_ai" }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+
+[target.'cfg(target_arch = "x86")'.dependencies]
+ai_bridge = { path = "../ai_bridge", features = ["load-dll"] }

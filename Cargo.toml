@@ -1,14 +1,16 @@
 [workspace]
 
 members = [
-    "server",
+    "simulator",
     "mahjong_core",
     "ai_dll",
     "ai_bridge",
     "ai_wasm",
     "mahjong_ai",
     "app",
-    "browser-app/src-tauri"
+    "browser-app/src-tauri",
+    "game_lib",
+    "proc_macros"
 ]
 
 resolver = "2"

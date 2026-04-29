@@ -54,6 +54,7 @@ fn is_tanki(mentsu: &Mentsu) -> bool {
     mentsu
         .pai_list()
         .iter()
+        .take(mentsu.pai_len() as usize)
         .any(|x| x.flag() == MentsuFlag::FLAG_AGARI)
 }
 
@@ -61,6 +62,7 @@ fn is_kanchan(mentsu: &Mentsu) -> bool {
     let index = mentsu
         .pai_list()
         .iter()
+        .take(mentsu.pai_len() as usize)
         .enumerate()
         .find(|(_, x)| x.flag() == MentsuFlag::FLAG_AGARI);
 
@@ -77,6 +79,7 @@ fn is_penchan(mentsu: &Mentsu) -> bool {
     let index = mentsu
         .pai_list()
         .iter()
+        .take(mentsu.pai_len() as usize)
         .enumerate()
         .find(|(_, x)| x.flag() == MentsuFlag::FLAG_AGARI);
 
@@ -119,7 +122,12 @@ pub fn add_machi_to_mentsu(mentsu: &[Vec<Mentsu>], p: &Pai) -> Vec<Vec<Mentsu>> 
 
         // ツモフラグを立てるべき牌の位置を探す
         for (index, mentsu_subvec) in mentsu_vec.iter().enumerate() {
-            for (index2, mentsu_sub) in mentsu_subvec.pai_list().iter().enumerate() {
+            for (index2, mentsu_sub) in mentsu_subvec
+                .pai_list()
+                .iter()
+                .take(mentsu_subvec.pai_len() as usize)
+                .enumerate()
+            {
                 if mentsu_sub.pai_num() == p.pai_num() {
                     positions.push((index, index2));
                     break;
@@ -220,6 +228,20 @@ impl AgariBehavior for GameStateT {
 
         if !fulo.is_empty() {
             agari.menzen = false;
+        }
+
+        // 国士無双の判定
+        if mentsu.len() == 13 && fulo.is_empty() {
+            agari.kokushi = true;
+            agari.fu = 0;
+            // 13面待ちの判定: あがり牌が雀頭（ペア）を構成している場合
+            if mentsu
+                .iter()
+                .any(|m| m.mentsu_type() == MentsuType::TYPE_ATAMA && is_tanki(m))
+            {
+                agari.tanki = true;
+            }
+            return agari;
         }
 
         for item in mentsu {

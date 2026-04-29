@@ -6,6 +6,7 @@ pub mod fbs_utils;
 pub mod game_process;
 #[cfg(feature = "load-pailist")]
 pub mod load_pailist;
+#[allow(clippy::all, unused_imports)]
 pub mod mahjong_generated;
 #[cfg(feature = "std")]
 pub mod play_log;

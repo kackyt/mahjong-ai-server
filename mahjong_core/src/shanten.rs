@@ -1,5 +1,6 @@
 use crate::mahjong_generated::open_mahjong::{Mentsu, MentsuFlag, MentsuPai, MentsuType, PaiT};
 use itertools::iproduct;
+use std::sync::OnceLock;
 
 /// 牌姿の内部表現
 #[derive(Debug, Clone, Default)]
@@ -33,6 +34,77 @@ pub fn shanten(mut n_mentsu: i32, mut n_tahtsu: i32, mut n_koritsu: i32, b_atama
     13 - n_mentsu * 3 - n_tahtsu * 2 - n_koritsu
 }
 
+// ============================================================
+// 面子カウント ルックアップテーブル（LUT）
+// 色ごとの牌カウント [i32; 9] → (mentsu, tahtsu, koritsu) の結果を
+// 5進数エンコードで直接インデックス参照可能な配列にキャッシュする
+// ============================================================
+
+/// LUTサイズ: 5^9 = 1,953,125
+const LUT_SIZE: usize = 1_953_125;
+
+/// 5進数エンコード: [i32; 9] → usize
+/// 各要素は 0~4 の範囲を想定
+#[inline]
+fn encode_suit(hai_count: &[i32; 9]) -> usize {
+    let mut idx = 0usize;
+    let mut base = 1usize;
+    for &count in hai_count.iter() {
+        let v = count.clamp(0, 4) as usize;
+        idx += v * base;
+        base *= 5;
+    }
+    idx
+}
+
+/// LUTの遅延初期化用グローバル変数
+static SUIT_LUT: OnceLock<Vec<[(i32, i32, i32); 2]>> = OnceLock::new();
+
+/// LUTを取得（初回呼び出し時に構築、以降は参照のみ）
+fn get_suit_lut() -> &'static Vec<[(i32, i32, i32); 2]> {
+    SUIT_LUT.get_or_init(|| {
+        let mut table = vec![[(0, 0, 0), (0, 0, 0)]; LUT_SIZE];
+        // 全パターンを列挙して事前計算
+        let mut hai = [0i32; 9];
+        build_suit_lut(&mut table, &mut hai, 0);
+        table
+    })
+}
+
+/// 再帰的に全パターンを列挙してLUTを構築
+fn build_suit_lut(table: &mut Vec<[(i32, i32, i32); 2]>, hai: &mut [i32; 9], pos: usize) {
+    if pos >= 9 {
+        let idx = encode_suit(hai);
+        table[idx] = mentsu_count_raw(hai, 0);
+        return;
+    }
+    // 合計が14を超える場合は無意味なのでスキップ（手牌は最大14枚）
+    let current_sum: i32 = hai.iter().take(pos).sum();
+    let max_remaining = 14 - current_sum;
+    for v in 0..=4.min(max_remaining) {
+        hai[pos] = v;
+        build_suit_lut(table, hai, pos + 1);
+    }
+    hai[pos] = 0;
+}
+
+/// LUTを参照する高速版 mentsu_count（公開API）
+pub fn mentsu_count(hai_count: &mut [i32; 9]) -> [(i32, i32, i32); 2] {
+    debug_assert!(
+        hai_count.iter().all(|&c| (0..=4).contains(&c)),
+        "Invalid tile count: {:?}",
+        hai_count
+    );
+    debug_assert!(
+        hai_count.iter().sum::<i32>() <= 14,
+        "Total tile count exceeds 14: {:?}",
+        hai_count
+    );
+    let lut = get_suit_lut();
+    let idx = encode_suit(hai_count);
+    lut[idx]
+}
+
 pub fn tahtsu_koritsu_count(hai_count: &[i32; 9]) -> [(i32, i32, i32); 2] {
     let (mut n_pai, mut n_dazi, mut n_guli) = (0, 0, 0);
 
@@ -51,19 +123,20 @@ pub fn tahtsu_koritsu_count(hai_count: &[i32; 9]) -> [(i32, i32, i32); 2] {
     [(0, n_dazi, n_guli), (0, n_dazi, n_guli)]
 }
 
-pub fn mentsu_count(hai_count: &mut [i32; 9], n: usize) -> [(i32, i32, i32); 2] {
+/// LUT構築用の面子カウント実装（再帰版・内部使用のみ）
+fn mentsu_count_raw(hai_count: &mut [i32; 9], n: usize) -> [(i32, i32, i32); 2] {
     if n >= 9 {
         return tahtsu_koritsu_count(hai_count);
     }
 
-    let mut max_count = mentsu_count(hai_count, n + 1);
+    let mut max_count = mentsu_count_raw(hai_count, n + 1);
 
     // 順子を抜き出す
     if n < 7 && hai_count[n] > 0 && hai_count[n + 1] > 0 && hai_count[n + 2] > 0 {
         hai_count[n] -= 1;
         hai_count[n + 1] -= 1;
         hai_count[n + 2] -= 1;
-        let mut r = mentsu_count(hai_count, n);
+        let mut r = mentsu_count_raw(hai_count, n);
         hai_count[n] += 1;
         hai_count[n + 1] += 1;
         hai_count[n + 2] += 1;
@@ -80,7 +153,7 @@ pub fn mentsu_count(hai_count: &mut [i32; 9], n: usize) -> [(i32, i32, i32); 2] 
     // 刻子を抜き出す
     if hai_count[n] >= 3 {
         hai_count[n] -= 3;
-        let mut r2 = mentsu_count(hai_count, n);
+        let mut r2 = mentsu_count_raw(hai_count, n);
         hai_count[n] += 3;
         r2[0].0 += 1;
         r2[1].0 += 1;
@@ -359,9 +432,9 @@ impl PaiState {
     }
 
     fn get_shanten_case(&mut self, b_atama: bool, n_fulo: usize) -> i32 {
-        let m = mentsu_count(&mut self.hai_count_m, 0);
-        let p = mentsu_count(&mut self.hai_count_p, 0);
-        let s = mentsu_count(&mut self.hai_count_s, 0);
+        let m = mentsu_count(&mut self.hai_count_m);
+        let p = mentsu_count(&mut self.hai_count_p);
+        let s = mentsu_count(&mut self.hai_count_s);
         let mut z = (0, 0, 0);
 
         for n in 0..7 {
@@ -494,10 +567,9 @@ impl PaiState {
         shanten
     }
 
-    pub fn get_shanten(&mut self, n_fulo: usize) -> i32 {
+    fn get_standard_form_min_shanten(&mut self, n_fulo: usize) -> i32 {
         let mut min_shanten = self.get_shanten_case(false, n_fulo);
 
-        // Standard form
         for n in 0..9 {
             if self.hai_count_m[n] >= 2 {
                 self.hai_count_m[n] -= 2;
@@ -522,6 +594,15 @@ impl PaiState {
                 self.hai_count_z[n] += 2;
             }
         }
+        min_shanten
+    }
+
+    pub fn get_standard_shanten(&mut self, n_fulo: usize) -> i32 {
+        self.get_standard_form_min_shanten(n_fulo)
+    }
+
+    pub fn get_shanten(&mut self, n_fulo: usize) -> i32 {
+        let mut min_shanten = self.get_standard_form_min_shanten(n_fulo);
 
         // Chiitoitsu (only if menzen)
         if n_fulo == 0 {
@@ -530,6 +611,56 @@ impl PaiState {
         }
 
         min_shanten
+    }
+
+    pub fn is_kokushi_agari(&self) -> bool {
+        self.get_kokushi_shanten() == -1
+    }
+}
+
+pub fn all_of_kokushi(pai_state: &PaiState) -> Vec<Vec<Mentsu>> {
+    if !pai_state.is_kokushi_agari() {
+        return vec![];
+    }
+
+    let mut vector = Vec::new();
+    let yaochu_indices = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33]; // Man 1,9, Pin 1,9, Sou 1,9, Zihai 1-7
+
+    for &idx in &yaochu_indices {
+        let count = if idx < 9 {
+            pai_state.hai_count_m[idx]
+        } else if idx < 18 {
+            pai_state.hai_count_p[idx - 9]
+        } else if idx < 27 {
+            pai_state.hai_count_s[idx - 18]
+        } else {
+            pai_state.hai_count_z[idx - 27]
+        };
+
+        if count >= 1 {
+            let m_type = if count >= 2 {
+                MentsuType::TYPE_ATAMA
+            } else {
+                MentsuType::TYPE_KOKUSHI // Dedicated type for single tile in Kokushi
+            };
+            let m = Mentsu::new(
+                &[
+                    MentsuPai::new(idx as u8, 0, MentsuFlag::FLAG_NONE),
+                    MentsuPai::new(idx as u8, 0, MentsuFlag::FLAG_NONE),
+                    MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
+                    MentsuPai::new(0, 0, MentsuFlag::FLAG_NONE),
+                ],
+                count as u32,
+                m_type,
+            );
+            vector.push(m);
+        }
+    }
+
+    if vector.len() == 13 {
+        vec![vector]
+    } else {
+        vec![]
     }
 }
 
@@ -591,10 +722,189 @@ impl PaiT {
             return false;
         }
 
-        if num >= 33 {
+        if num >= 34 {
             return false;
         }
 
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mentsu_count_consistency() {
+        // LUTと生の実装が一致することを確認
+        let mut test_cases = [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [3, 0, 0, 0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [4, 0, 0, 0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [2, 2, 2, 2, 2, 2, 2, 0, 0],
+        ];
+
+        for hai in test_cases.iter_mut() {
+            let lut_res = mentsu_count(hai);
+            let raw_res = mentsu_count_raw(hai, 0);
+            assert_eq!(lut_res, raw_res, "Consistency failed for {:?}", hai);
+        }
+    }
+
+    #[test]
+    fn test_kokushi_shanten() {
+        // 国士無双 13面待ち (14枚)
+        let mut state = PaiState::default();
+        let yaochu = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33];
+        for &p in &yaochu {
+            state.append(&PaiT {
+                pai_num: p,
+                id: 0,
+                is_nakare: false,
+                is_riichi: false,
+                is_tsumogiri: false,
+            });
+        }
+        // あと1枚何か足す (1m)
+        state.append(&PaiT {
+            pai_num: 0,
+            id: 1,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        assert_eq!(state.get_kokushi_shanten(), -1);
+        assert!(state.is_kokushi_agari());
+
+        // 国士無双 1面待ち (13枚)
+        let mut state = PaiState::default();
+        for &p in yaochu.iter().take(11) {
+            state.append(&PaiT {
+                pai_num: p,
+                id: 0,
+                is_nakare: false,
+                is_riichi: false,
+                is_tsumogiri: false,
+            });
+        }
+        // 中を2枚にする
+        state.append(&PaiT {
+            pai_num: 33,
+            id: 0,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        state.append(&PaiT {
+            pai_num: 33,
+            id: 1,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        // 13種類のうち11種類+中(2枚) = 12種類。あと1種類足りないので0シャンテン（テンパイ）。
+        assert_eq!(state.get_kokushi_shanten(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid tile count")]
+    fn test_mentsu_count_invalid_input() {
+        let mut hai = [5, 0, 0, 0, 0, 0, 0, 0, 0];
+        let _ = mentsu_count(&mut hai);
+    }
+
+    #[test]
+    #[should_panic(expected = "Total tile count exceeds 14")]
+    fn test_mentsu_count_invalid_sum() {
+        let mut hai = [4, 4, 4, 3, 0, 0, 0, 0, 0]; // Sum = 15
+        let _ = mentsu_count(&mut hai);
+    }
+
+    #[test]
+    fn test_tin_shanten() {
+        // 清一色 テンパイ
+        let mut state = PaiState::default();
+        for i in 0..3 {
+            for j in 0..3 {
+                state.append(&PaiT {
+                    pai_num: j,
+                    id: i as u8,
+                    is_nakare: false,
+                    is_riichi: false,
+                    is_tsumogiri: false,
+                });
+            }
+        }
+        state.append(&PaiT {
+            pai_num: 3,
+            id: 0,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        state.append(&PaiT {
+            pai_num: 4,
+            id: 0,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        state.append(&PaiT {
+            pai_num: 5,
+            id: 0,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        state.append(&PaiT {
+            pai_num: 6,
+            id: 0,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+        assert_eq!(state.get_standard_shanten(0), 0);
+    }
+
+    #[test]
+    fn test_kokushi_mentsu_type() {
+        // 国士無双和了時のMentsuTypeがTYPE_KOKUSHIであることを確認
+        let mut state = PaiState::default();
+        let yaochu = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33];
+        for &p in &yaochu {
+            state.append(&PaiT {
+                pai_num: p,
+                id: 0,
+                is_nakare: false,
+                is_riichi: false,
+                is_tsumogiri: false,
+            });
+        }
+        state.append(&PaiT {
+            pai_num: 0,
+            id: 1,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+
+        let mentsu_list = all_of_kokushi(&state);
+        assert_eq!(mentsu_list.len(), 1);
+        let mentsu = &mentsu_list[0];
+        assert_eq!(mentsu.len(), 13);
+
+        let n_kokushi = mentsu
+            .iter()
+            .filter(|m| m.mentsu_type() == MentsuType::TYPE_KOKUSHI)
+            .count();
+        let n_atama = mentsu
+            .iter()
+            .filter(|m| m.mentsu_type() == MentsuType::TYPE_ATAMA)
+            .count();
+
+        assert_eq!(n_kokushi, 12);
+        assert_eq!(n_atama, 1);
     }
 }
