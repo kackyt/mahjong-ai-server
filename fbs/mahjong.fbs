@@ -27,7 +27,8 @@ enum MentsuType : ubyte {
     TYPE_KOUTSU,
     TYPE_MINKAN,
     TYPE_ANKAN,
-    TYPE_ATAMA
+    TYPE_ATAMA,
+    TYPE_KOKUSHI
 }
 
 struct Pai {
@@ -104,7 +105,8 @@ struct Rule {
     oyanagare_type: uint;
     double_ron_type: uint;
     initial_score: uint;
-    kan_in_riichi_type: uint;
+    kan_in_riichi: uint;
+    enable_kansaki: bool;
 }
 
 struct GameState {

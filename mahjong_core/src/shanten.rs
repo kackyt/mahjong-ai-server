@@ -641,7 +641,7 @@ pub fn all_of_kokushi(pai_state: &PaiState) -> Vec<Vec<Mentsu>> {
             let m_type = if count >= 2 {
                 MentsuType::TYPE_ATAMA
             } else {
-                MentsuType::TYPE_KOUTSU // Dummy type for single tile in Kokushi
+                MentsuType::TYPE_KOKUSHI // Dedicated type for single tile in Kokushi
             };
             let m = Mentsu::new(
                 &[
@@ -809,31 +809,33 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_shanten() {
+    #[should_panic(expected = "Invalid tile count")]
+    fn test_mentsu_count_invalid_input() {
+        let mut hai = [5, 0, 0, 0, 0, 0, 0, 0, 0];
+        let _ = mentsu_count(&mut hai);
+    }
+
+    #[test]
+    #[should_panic(expected = "Total tile count exceeds 14")]
+    fn test_mentsu_count_invalid_sum() {
+        let mut hai = [4, 4, 4, 3, 0, 0, 0, 0, 0]; // Sum = 15
+        let _ = mentsu_count(&mut hai);
+    }
+
+    #[test]
+    fn test_tin_shanten() {
         // 清一色 テンパイ
         let mut state = PaiState::default();
         for i in 0..3 {
-            state.append(&PaiT {
-                pai_num: 0,
-                id: i as u8,
-                is_nakare: false,
-                is_riichi: false,
-                is_tsumogiri: false,
-            });
-            state.append(&PaiT {
-                pai_num: 1,
-                id: i as u8,
-                is_nakare: false,
-                is_riichi: false,
-                is_tsumogiri: false,
-            });
-            state.append(&PaiT {
-                pai_num: 2,
-                id: i as u8,
-                is_nakare: false,
-                is_riichi: false,
-                is_tsumogiri: false,
-            });
+            for j in 0..3 {
+                state.append(&PaiT {
+                    pai_num: j,
+                    id: i as u8,
+                    is_nakare: false,
+                    is_riichi: false,
+                    is_tsumogiri: false,
+                });
+            }
         }
         state.append(&PaiT {
             pai_num: 3,
@@ -863,7 +865,46 @@ mod tests {
             is_riichi: false,
             is_tsumogiri: false,
         });
-
         assert_eq!(state.get_standard_shanten(0), 0);
+    }
+
+    #[test]
+    fn test_kokushi_mentsu_type() {
+        // 国士無双和了時のMentsuTypeがTYPE_KOKUSHIであることを確認
+        let mut state = PaiState::default();
+        let yaochu = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33];
+        for &p in &yaochu {
+            state.append(&PaiT {
+                pai_num: p,
+                id: 0,
+                is_nakare: false,
+                is_riichi: false,
+                is_tsumogiri: false,
+            });
+        }
+        state.append(&PaiT {
+            pai_num: 0,
+            id: 1,
+            is_nakare: false,
+            is_riichi: false,
+            is_tsumogiri: false,
+        });
+
+        let mentsu_list = all_of_kokushi(&state);
+        assert_eq!(mentsu_list.len(), 1);
+        let mentsu = &mentsu_list[0];
+        assert_eq!(mentsu.len(), 13);
+
+        let n_kokushi = mentsu
+            .iter()
+            .filter(|m| m.mentsu_type() == MentsuType::TYPE_KOKUSHI)
+            .count();
+        let n_atama = mentsu
+            .iter()
+            .filter(|m| m.mentsu_type() == MentsuType::TYPE_ATAMA)
+            .count();
+
+        assert_eq!(n_kokushi, 12);
+        assert_eq!(n_atama, 1);
     }
 }
